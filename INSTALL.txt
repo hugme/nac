@@ -1,0 +1,12 @@
+This is the current installation. It's very manual right now, I hope to write a better installation at some point.
+
+ To install the UI:
+  1. Download nac-ui and place it in /var/www or whereever you would like it to be.
+  2. Change the owner of everything in html, var and cgi-bin to apache:apache
+  3. Change the owner of etc/passwd and etc/admin_level to apache:apache
+  4. build nac.conf in /etc
+  5. build muttrc in /etc
+  6. build .pgpass in apache's base directory
+  7. pub varset in cgi-bin and cgi-bin/bin (hard linked to each other)
+  
+

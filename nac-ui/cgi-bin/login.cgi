@@ -40,9 +40,6 @@ esac
 
 [ -n "$USERNAME" ] && {
   # if there is, check the password
-  #USER_VRFY=$(ldapsearch -x -D"cn=$USERNAME,ou=people,dc=theice,dc=com" cn=$USERNAME cn=SystemAdministrators -w "$PASSWD" > /dev/null 2>&1 && echo yes || echo no)
-  #USER_VRFY=$(ldapsearch -H ldap://10.1.108.210 -D CPEX\\\\$USERNAME -x -w '$PASSWD' -b DC=CPEX,DC=COM "(samAccountName=$USERNAME)" > /dev/null 2>&1 && echo yes || echo no)
-  USER_VRFY=$(ldapsearch -H ldap://10.1.108.210 -D "CPEX\\$USERNAME" -x -w '$PASSWD' -b DC=CPEX,DC=COM "(samAccountName=$USERNAME)" >> $ERROR_LOG 2>&1 && echo yes || echo no)
   USER_VRFY=yes
   [[ "${USER_VRFY}" == yes ]] && {
     # set the expiration date
@@ -62,8 +59,7 @@ esac
   } || {
     LOGIN_ERROR="Login Failed. Please try again."
     ## turn this on for testing only (it shows the password
-    #echo "Login_Error $DATE -- $USERNAME - $USER_VRFY - ldapsearch -H ldap://10.1.108.210 -D CPEX\\\\$USERNAME -x -w '$PASSWD' -b DC=CPEX,DC=COM \"(samAccountName=$USERNAME)\"" >> $ERROR_LOG
-    echo "Login_Error $DATE -- $USERNAME - $USER_VRFY - $TEST_HASH" >> $ERROR_LOG
+    #echo "Login_Error $DATE -- $USERNAME - $USER_VRFY - $TEST_HASH" >> $ERROR_LOG
   }
 } 
 

@@ -1,0 +1,26 @@
+view_my_profile|Profile|USER_LEVEL|ME|0|
+#my_searches|Search Strings|USER_LEVEL|ME|0|
+
+host_edit|Hosts|USER_LEVEL|OBJECTS|0|
+role_edit|Roles|USER_LEVEL|OBJECTS|0| 
+service_edit|Services|USER_LEVEL|OBJECTS|0| 
+esc_edit|Escalations|USER_LEVEL|OBJECTS|0| 
+#dep_edit|Dependancies|USER_LEVEL|OBJECTS|0| 
+facts_edit|Facts|USER_LEVEL|OBJECTS|0| 
+
+
+host_temp_edit|Host Template|USER_LEVEL|TEMPLATE|0| 
+service_temp_edit|Service Template|USER_LEVEL|TEMPLATE|0| 
+contact_edit|Contacts|USER_LEVEL|TEMPLATE|0| 
+time_periods_edit|Time Periods|USER_LEVEL|TEMPLATE|0| 
+commands_edit|Commands|USER_LEVEL|TEMPLATE|0| 
+
+report_sys_info|System Information|USER_LEVEL|REPORTS|0| 
+
+#host_group_edit|Host Groups|USER_LEVEL|GROUPS|0|
+#service_group_edit|Service Groups|USER_LEVEL|GROUPS|0| 
+
+#my_users|My users|ADMIN|ADMIN|2|
+#add_user_dir|Add User|ADMIN|ADMIN|3|
+#department_add|Department add|ADMIN|ADMIN|4|
+#user_tree|User Tree|ADMIN|ADMIN|4|

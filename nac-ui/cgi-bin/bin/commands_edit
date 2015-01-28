@@ -1,0 +1,130 @@
+#!/bin/bash
+
+# set some variables
+. $(cat varset)
+
+use_admin_functions
+use_base_functions
+use_bust_functions
+use_date_functions
+use_check_functions
+use_form_functions
+
+#echo $QUERY_STRING
+nno=0
+for X in  ${QUERY_STRING//&/ }; do
+  case $X in
+    SCR=*) SCR=${X#*=};;
+    DO=*) DO=${X#*=};;
+    COMMAND_ID=*) COMMAND_ID=${X#*=};;
+
+    DEL_NAME=*) NEW_NAME=$(bustit ${X#*=});;
+
+    NEW_NAME=*) NEW_NAME=$(bustit ${X#*=});;
+    NEW_COMMAND=*) NEW_COMMAND=$(sql_active_bust ${X#*=} | sed 's/%no pipes%/\|/g;s/\\/\\\\/g');;
+  esac
+done
+[[ $DO == NEW ]] && {
+  [[ ${#NEW_NAME} -gt 64 ]] && ERROR="$ERROR<br>That name is too long. Please pick something shorter"
+  [[ ${#NEW_NAME} -lt 2 ]] && ERROR="$ERROR<br>That name is too short. Please pick something longer"
+  [[ ! -z "$(echo "${NEW_NAME}" | tr -d "[A-Za-z0-9_.\-]")" ]] && ERROR="$ERROR <br> Invalid charcters in the name"
+  REPEAT=$(echo "select name from commands where name='$NEW_NAME';" |sql_query)
+  [[ ! -z $REPEAT ]] && ERROR="${ERROR} <br> That name already exists Please choose another"
+  [[ -z $ERROR ]] && {
+    echo "insert into commands (name) values ('$NEW_NAME');"|sql_update
+    COMMAND_ID=$(echo "select command_id from commands where name='$NEW_NAME';" |sql_query)
+    DO=COMMAND
+  } || {
+    echo "<p id=error>$ERROR</p>"
+    DO=SHOW
+  }
+}
+[[ $DO == DELETE ]] && {
+  REPEAT=$(echo "select command_id from commands where command_id='$COMMAND_ID';" |sql_query)
+  [[ -z $REPEAT ]] && ERROR="$ERROR <br> That command does not exist"
+  #### <<--  check to see if this command is beign used anywhere
+  [[ -z $ERROR ]] && {
+   echo "delete from commands where command_id='$COMMAND_ID'" |sql_update
+   [[ $? = 0 ]] && unset DO || {
+   ERROR="$ERROR <br> There was an unknown error in deleting that command."
+   DO=COMMAND
+   }
+  } || {
+    #echo "<p id=error>$ERROR</p>"
+    DO=COMMAND
+  }
+}
+
+[[ -z $DO || $DO == SHOW ]] && {
+cat <<- EOF
+  <center><b>Commands</center></b><br>
+  <form method=POST action=/cgi-bin/auth.cgi>
+    <center>New Command: <input type=text name="NEW_NAME" size="30">
+    <input type=hidden name=SCR value=$SCR>
+    <input type=hidden name=DO value=NEW>
+    <input type=submit value="Add It">
+  </form></center><br>
+  <table border=1 cellspacing=0 cellpadding=5 align=center>
+EOF
+
+  i=1
+  while IFS="|" read COMMAND_ID NAME _ ; do 
+    [[ $i == 0 ]] && echo "<tr>"
+    echo "<td><a href=\"/cgi-bin/auth.cgi?SCR=$SCR&DO=COMMAND&COMMAND_ID=$COMMAND_ID\">$NAME</a></td>"
+    [[ $i == 4 ]] && { echo "</tr>"; i=0; }
+    i=$(($i+1))
+  done< <(echo "select command_id,name from commands order by name" | sql_query)
+  echo "</table>"
+  exit 0
+}
+
+[[ $DO == UPDATE ]] && {
+  ## do your checks
+  EXISTS=$(echo "select command_id from commands where command_id='$COMMAND_ID';" |sql_query)
+  [[ -z $EXISTS ]] && {
+    ERROR="$ERROR <br> That Command does not exist"
+  } || {
+    [[ -z $NEW_NAME ]] && ERROR="$ERROR <br> The Command name is required"
+    [[ ${#NEW_NAME} -gt 64 ]] && ERROR="$ERROR<br>Your command name is too long. Please pick something shorter"
+    [[ ${#NEW_BUILD_NAME} -gt 1024 ]] && ERROR="$ERROR<br>Your Command is too long. Please pick something shorter"
+    [[ ! -z "$(echo "${NEW_NAME}" | tr -d "[A-Za-z0-9+_.\-]")" ]] && ERROR="$ERROR <br> Invalid charcters in your Command name"
+    [[ ! -z "$(echo "${NEW_COMMAND}" | tr -d "[ A-Za-z0-9+_.,\\\\\"\*:=;\|/&%$\-]")" ]] && ERROR="$ERROR <br> \
+		Invalid charcters in your Command ==$(echo "${NEW_COMMAND}" | tr -d "[ A-Za-z0-9+_.,\\\\\"\*:=;\|/&%$\-]")=="
+    [[ -z $ERROR ]] && UPDATE="name='$NEW_NAME', command='$NEW_COMMAND'" 
+
+    [[ -z $ERROR ]] && {
+      echo "update commands set $UPDATE where command_id='$COMMAND_ID';" | sql_update
+      #echo "<br><br>update commands set $UPDATE where command_id='$COMMAND_ID';<br>===$UPDATE==="
+    }
+      ########### <<-- Write everything to autit lots, error logs and complaint logs
+  }
+  DO=COMMAND
+}
+
+
+[[ $DO == COMMAND ]] && {
+  IFS="|" read NAME _ <<< "$(echo "select name from commands where command_id='$COMMAND_ID';" | sql_query)"
+	cat <<- EOF
+	  <p id=error>$ERROR</p>
+	  <form method=POST action=/cgi-bin/auth.cgi>
+	  <center><b>$NAME</b></center>
+	  <br>
+	  Name: <input type=text name="NEW_NAME" value="$NAME" size="100"><br>
+	  Command: <input type=text name="NEW_COMMAND" value="$(echo "$(echo "select command from commands where command_id='$COMMAND_ID';" | sql_query)" | sed 's/"/\&#34/g;s/\\/\&#92/g')" size="100"><br>
+	EOF
+
+	cat <<- EOF
+	  <br><br>
+	  <input type=hidden name=SCR value=$SCR>
+	  <input type=hidden name=DO value=UPDATE>
+	  <input type=hidden name=COMMAND_ID value=$COMMAND_ID>
+	  <input type=submit value="Update This Command">
+	  </form><br>
+	  <form method=POST action=/cgi-bin/auth.cgi>
+	  <input type=hidden name=SCR value=$SCR>
+	  <input type=hidden name=DO value=DELETE>
+	  <input type=hidden name=COMMAND_ID value=$COMMAND_ID>
+	  <input type=submit value="Delete This Command">
+	  </form><br>
+	EOF
+}

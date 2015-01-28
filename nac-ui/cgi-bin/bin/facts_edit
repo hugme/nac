@@ -1,0 +1,74 @@
+#!/bin/bash
+
+# set some variables
+. $(cat varset)
+
+use_admin_functions
+use_base_functions
+use_bust_functions
+use_date_functions
+
+#echo $QUERY_STRING
+for X in  ${QUERY_STRING//&/ }; do
+  case $X in
+    SCR=*) SCR=${X#*=};;
+    DO=*) DO=${X#*=};;
+    FACT=*) FACT=${X#*=};;
+  esac
+done
+
+#####################################################################
+## Add a Fact
+#####################################################################
+
+[[ $DO == "ADD" ]] && {
+ # Check length and characters
+ [[ ${#FACT} -gt 63 ]] && ERROR="$ERROR<br>That fact name is too long. We have a 63 character limit on all facts"
+ [[ ${#FACT} -lt 2 ]] && ERROR="$ERROR<br>That fact name is too short. A fact must contain at least 2 characters"
+ [[ ! -z "$(echo "${FACT}" | tr -d "[A-Za-z0-9_]")" ]] && ERROR="$ERROR <br> Invalid charcters in the fact, you are allowed: A-Z,a-z,0-9, and _"
+ # Check to see if fact exists
+ [[ -z $ERROR ]] && {
+  [[ -n $(echo "select column_name from INFORMATION_SCHEMA.COLUMNS where table_name = 'facts' and column_name='$FACT'" | sql_query) ]] && ERROR="$ERROR <br> I'm already following that fact" 
+ }
+ [[ -z $ERROR ]] && echo "ALTER TABLE FACTS ADD COLUMN $FACT CHAR(64);" |sql_update
+}
+
+#####################################################################
+## Delete a Fact
+#####################################################################
+
+[[ $DO == "DELETE" ]] && {
+ # Check length and characters
+ [[ ${#FACT} -gt 63 ]] && ERROR="$ERROR<br>That fact name is too long. We have a 63 character limit on all facts"
+ [[ ${#FACT} -lt 2 ]] && ERROR="$ERROR<br>That fact name is too short. A fact must contain at least 2 characters"
+ [[ ! -z "$(echo "${FACT}" | tr -d "[A-Za-z0-9_]")" ]] && ERROR="$ERROR <br> Invalid charcters in the fact, you are allowed: A-Z,a-z,0-9, and _"
+ # Check to see if fact exists
+ [[ -z $ERROR ]] && {
+  [[ -z $(echo "select column_name from INFORMATION_SCHEMA.COLUMNS where table_name = 'facts' and column_name='$FACT'" | sql_query) ]] && ERROR="$ERROR <br> It doesn't look like I'm following that fact"
+ }
+ [[ -z $ERROR ]] && echo "ALTER TABLE FACTS DROP COLUMN $FACT;" |sql_update
+}
+
+
+#####################################################################
+## From here down print the page
+#####################################################################
+
+echo "<p id=error>$ERROR</p>"
+echo "<table cellpading=2 cellspacing=0 border=0>"
+ while IFS="|" read FACT _ ; do 
+  [[ $FACT != "server_id" ]] && {
+   echo "<tr><td>$FACT</td><td> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td><td><a href=\"auth.cgi?SCR=facts_edit&DO=DELETE&FACT=$FACT\">Stop following this fact</a></td>"
+  }
+ done< <(echo "select column_name, data_type, character_maximum_length from INFORMATION_SCHEMA.COLUMNS where table_name = 'facts';" | sql_query)
+cat << EOF
+</table>
+<br><br>
+<form method=POST action=/cgi-bin/auth.cgi>
+ <input type=hidden name=SCR value="$SCR">
+ <input type=hidden name=DO value="ADD">
+ Follow new fact: <input type=text size="20" NAME=FACT>
+ <input type=submit value="Follow this fact">
+</form>
+EOF
+

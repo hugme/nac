@@ -1,0 +1,158 @@
+
+add_remove_options() {
+  [[ -n $ADD_OPTIONS_LIST ]] && {
+    echo "<br><br>Add another argument"
+    echo "<select name=\"ADD_OPTION\">"
+    while read ADD_OPTION ; do
+        echo "<option value=\"$ADD_OPTION\">$ADD_OPTION</option>"
+    done< <(echo "$ADD_OPTIONS_LIST" | tr "|" "\n")
+    echo "</select>"
+  }
+  [[ -n $RM_OPTIONS_LIST ]] && {
+    echo "<br>Remove an argument"
+    echo "<select name=\"RM_OPTION\">"
+    while read RM_OPTION ; do
+        echo "<option value=\"$RM_OPTION\">$RM_OPTION</option>"
+    done< <(echo "$RM_OPTIONS_LIST" | tr "|" "\n")
+    echo "</select>"
+  }
+}
+
+show_timeperiod() {
+  SHOW_NAME="$1"
+  VALUE=$(echo "select name from time_periods where time_periods_id='$2';" |sql_query)
+  echo "<input type=text name=\"$SHOW_NAME\" value=\"$VALUE\" list=\"ALL_TIME_PERIODS\">"
+  [[ -z ${TP_LIST_ID[0]} ]] && {
+    i=0
+    while IFS="|" read TP_ID TP_NAME _; do
+      TP_LIST_ID[i]=$TP_ID
+      TP_LIST_NAME[i++]=$TP_NAME
+    done< <(echo "select time_periods_id,name from time_periods;" |sql_query)
+  }
+  echo "<datalist id=\"ALL_TIME_PERIODS\">"
+  for X in ${!TP_LIST_ID[@]} ; do
+    echo "    <option label=\"${TP_LIST_NAME[X]}\">${TP_LIST_NAME[X]}</option>"
+  done
+  echo "</datalist>"
+}
+
+show_service_note_options() {
+  QUERY="$1"
+  unset W_SCHECK U_SCHECK C_SCHECK R_SCHECK F_SCHECK S_SCHECK
+  for OPT in $(echo "$QUERY" | sql_query | tr "," " " ); do
+    case $OPT in
+      w) W_SCHECK=checked;;
+      u) U_SCHECK=checked;;
+      c) C_SCHECK=checked;;
+      r) R_SCHECK=checked;;
+      f) F_SCHECK=checked;;
+      s) S_SCHECK=checked;;
+    esac
+  done
+
+	cat <<- EOF
+          <dir>
+            <input type=checkbox name="NEW_SERVICE_NOTE_OPTIONS" value="w" $W_SCHECK>w - Send notification for a warning status<br>
+            <input type=checkbox name="NEW_SERVICE_NOTE_OPTIONS" value="u" $U_SCHECK>u - Send notification for an unknown status<br>
+            <input type=checkbox name="NEW_SERVICE_NOTE_OPTIONS" value="c" $C_SCHECK>c - Send notification for a critical<br>
+            <input type=checkbox name="NEW_SERVICE_NOTE_OPTIONS" value="r" $R_SCHECK>r - Send notification when the service recovers<br>
+            <input type=checkbox name="NEW_SERVICE_NOTE_OPTIONS" value="f" $F_SCHECK>f - Send notification when the device is flapping<br>
+            <input type=checkbox name="NEW_SERVICE_NOTE_OPTIONS" value="s" $S_SCHECK>s - Send notification when scheduled downtime starts and stops<br>
+            </dir>
+	EOF
+}
+
+show_host_note_options() {
+  QUERY="$1"
+  unset D_HCHECK U_HCHECK R_HCHECK F_HCHECK S_HCHECK
+  for OPT in $(echo "$QUERY" | sql_query | tr "," " " ); do
+    case $OPT in
+      d) D_HCHECK=checked;;
+      u) U_HCHECK=checked;;
+      r) R_HCHECK=checked;;
+      f) F_HCHECK=checked;;
+      s) S_HCHECK=checked;;
+    esac
+  done
+	cat <<- EOF
+          <dir>
+            <input type=checkbox name="NEW_HOST_NOTE_OPTIONS" value="d" $D_HCHECK>d - Send notification in the down state<br>
+            <input type=checkbox name="NEW_HOST_NOTE_OPTIONS" value="u" $U_HCHECK>u - Send notification in the unreachable state<br>
+            <input type=checkbox name="NEW_HOST_NOTE_OPTIONS" value="r" $R_HCHECK>r - Send notification when the device recovers<br>
+            <input type=checkbox name="NEW_HOST_NOTE_OPTIONS" value="f" $F_HCHECK>f - Send notification when the device is flapping<br>
+            <input type=checkbox name="NEW_HOST_NOTE_OPTIONS" value="s" $S_HCHECK>s - Send notification when scheduled downtime starts and stops<br>
+            </dir>
+	EOF
+}
+
+get_contacts() {
+  while IFS="|" read CONTACT_ID CONTACT_NAME _ ; do
+        CT[$CONTACT_ID]="$CONTACT_NAME"
+  done< <(echo "select contact_id,name from contacts;" | sql_query)
+}
+get_services() {
+  while IFS="|" read SERVICE_ID SERVICE_NAME _ ; do
+        ST[$SERVICE_ID]="$SERVICE_NAME"
+  done< <(echo "select service_id,name from services;" | sql_query)
+}
+
+get_contact_groups() {
+  while IFS="|" read GROUP_ID GROUP_NAME _ ; do
+        GT[$GROUP_ID]="$GROUP_NAME"
+  done< <(echo "select contact_group_id,name from contact_groups;" | sql_query)
+}
+show_contact_groups() {
+  CURRENT=$1
+  [[ -n $CURRENT ]] &&{
+    echo "<br>Contact Group Members (check to remove):<br>"
+    [[ ! -z $CURRENT || ! $CURRENT == 0 ]] && {
+      while IFS="|" read G _; do
+        echo "<input type=checkbox name=DEL_CONTACT_GROUP value=$G>${GT[G]}<BR>"
+      done< <(echo "select contact_group_id from contact_groups where $(echo $CURRENT|sed 's/^/contact_group_id=/;s/,/ or contact_group_id=/g');" |sql_query)
+    }
+    echo "<br>&nbsp;&nbsp;&nbsp; Add a Contact Group: <input type=text name=\"NEW_CONTACT_GROUP\" value=\"\" size=\"32\" list=\"GROUP_CONTACTS\"><br>"
+    echo "<datalist id=\"GROUP_CONTACTS\">"
+    for i in ${!GT[*]} ; do echo "    <option label=\"${GT[$i]}\">${GT[$i]}</option>";done
+    echo "</datalist>"
+  } || {
+    ERROR="$ERROR<br> show_contact_groups did not receive any data"
+  }
+}
+alter_contact_group() {
+  CURRENT=$1
+  [[ -n $NEW_CONTACT_GROUP ]] && {
+     [[ ! -z "$(echo "${NEW_CONTACT_GROUP}" | tr -d "[ A-Za-z0-9+_.\-]")" ]] && ERROR="$ERROR <br> Invalid contact group"
+     NEW_GROUP_ID=$(echo "select contact_group_id from contact_groups where name='$NEW_CONTACT_GROUP';" |sql_query)
+     [[ $NEW_GROUP_ID == $CONTACT_GROUP_ID ]] && ERROR="$ERROR <br> You cannot add a group to itself"
+     [[ -z $NEW_GROUP_ID ]] && {
+       ERROR="$ERROR <br> That Group does not exist"
+     } || {
+       for X in $(echo $CURRENT|tr "," " "); do [[ $NEW_GROUP_ID == $X ]] && ERROR="$ERROR <br> That group is already a member of this group" ; done
+     }
+     [[ -z $ERROR ]] && {
+       [[ $CURRENT == 0 || -z $CURRENT ]] && UPDATE="$UPDATE|contact_groups='$NEW_GROUP_ID'" || UPDATE="$UPDATE|contact_groups='$CURRENT,$NEW_GROUP_ID'"
+     }
+  }
+  [[ -n $DEL_CONTACT_GROUP ]] && {
+    [[ ! -z "$(echo "${DEL_CONTACT_GROUP}" | tr -d "[ A-Za-z0-9+|_.\-]")" ]] && ERROR="$ERROR <br> Invalid contact group"
+    [[ -z $ERROR ]] && {
+      for DGG in $(echo $DEL_CONTACT_GROUP|tr "|" " "); do
+        [[ $DGG == $CURRENT ]] && CURRENT=0
+        for X in $(echo $CURRENT|tr "," " "); do [[ ! $DGG == $X ]] && { [[ -z $NEW_CGG ]] && NEW_CGG="$X" || NEW_CGG="$NEW_CGG,$X"; }; done
+        CGG=$NEW_CGG; unset NEW_CGG
+      done
+      [[ -z $CURRENT ]] && CGG=0
+      UPDATE="$UPDATE|contact_groups='$CGG'"
+    }
+  }
+  #echo $UPDATE
+}
+
+request_service() {
+  CURRENT="$1"
+  echo "<br>Service:<br>"
+  echo "<input type=text name=NEW_SERVICE value=\"${ST[CURRENT]}\" list=\"SERVICE_LIST\" size=\"32\"><BR>"
+  echo "<datalist id=\"SERVICE_LIST\">"
+  for i in ${!ST[*]} ; do echo "    <option label=\"${ST[$i]}\">${ST[$i]}</option>";done
+  echo "</datalist>"
+}

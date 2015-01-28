@@ -1,0 +1,167 @@
+#!/bin/bash
+
+# set some variables
+. $(cat varset)
+
+use_admin_functions
+use_base_functions
+use_bust_functions
+use_date_functions
+use_form_functions
+
+#echo $QUERY_STRING
+for X in  ${QUERY_STRING//&/ }; do
+  case $X in
+    SCR=*) SCR=${X#*=};;
+    DO=*) DO=${X#*=};;
+    ESC_ID=*) ESC_ID=${X#*=};;
+    NEW_ESC=*) NEW_ESC=$(bustit ${X#*=});;
+    NEW_NAME=*) NEW_NAME=$(bustit ${X#*=});;
+    NEW_SERVICE=*) NEW_SERVICE=$(bustit ${X#*=});;
+    NEW_CONTACT_GROUP=*) NEW_CONTACT_GROUP=$(bustit ${X#*=});;
+    DEL_CONTACT_GROUP=*) DEL_CONTACT_GROUP="$DEL_CONTACT_GROUP|$(bustit ${X#*=})";;
+    NEW_FIRST_NOTE=*) NEW_FIRST_NOTE=$(bustit ${X#*=});;
+    NEW_SECOND_NOTE=*) NEW_SECOND_NOTE=$(bustit ${X#*=});;
+    NEW_NOTE_INTERVAL=*) NEW_NOTE_INTERVAL=$(bustit ${X#*=});;
+    NEW_ESC_PERIOD=*) NEW_ESC_PERIOD=$(bustit ${X#*=});;
+    NEW_ESC_OPTIONS=*) NEW_ESC_OPTIONS=$(bustit ${X#*=});;
+    NEW_INT_NOTE=*) NEW_INT_NOTE=$(bustit ${X#*=});;
+  esac
+done
+
+[[ $DO == NEW ]] && {
+  [[ ${#NEW_ESC} -gt 512 ]] && ERROR="$ERROR<br>Your escalation name is too long. Please pick something shorter"
+  [[ ! -z "$(echo "${NEW_ESC}" | tr -d "[ A-Za-z0-9+_.\-]")" ]] && ERROR="$ERROR <br> Invalid charcters in your escalation name"
+  REPEAT_ESC=$(echo "select name from escalations where name='$NEW_ESC';" |sql_query)
+  [[ ! -z $REPEAT_ESC ]] && ERROR="${ERROR} That escalation already exists Please choose another name<BR>"
+  [[ -z $ERROR ]] && {
+    echo "insert into escalations (name,service_id) values ('$NEW_ESC','0');"|sql_update
+    ESC_ID=$(echo "select esc_id from escalations where name='$NEW_ESC';" |sql_query)
+    DO=ESC
+  } || {
+    echo "<p id=error>$ERROR</p>"
+    DO=SHOW
+  }
+}
+[[ $DO == DELETE ]] && {
+  REPEAT_ESC=$(echo "select service_id from escalations where esc_id='$ESC_ID';" |sql_query)
+  [[ -z $REPEAT_ESC ]] && ERROR="$ERROR <br> That escalation does not exist"
+  [[ $REPEAT_ESC != 0 ]] && ERROR="$ERROR <br> You must set the service to '_' before you are able to delete it"
+  [[ -z $ERROR ]] && {
+    echo "delete from escalations where esc_id='$ESC_ID'"|sql_update
+    DO=SHOW
+  } || {
+    echo "<p id=error>$ERROR</p>"
+    DO=ESC
+  }
+}
+
+[[ -z $DO || $DO == SHOW ]] && {
+cat <<- EOF
+  <center><b>Escalations</center></b><br>
+  <form method=POST action=/cgi-bin/auth.cgi>
+    <center>New escalation name: <input type=text name="NEW_ESC" size="30">
+    <input type=hidden name=SCR value=$SCR>
+    <input type=hidden name=DO value=NEW>
+    <input type=submit value="Add It">
+  </form></center><br>
+  <table border=1 cellspacing=0 cellpadding=5>
+EOF
+
+  i=1
+  while IFS="|" read ESC_ID ESC_NAME SERVICE _ ; do 
+    [[ $SERVICE == "_" ]] && unset SERVICE
+    [[ $i == 0 ]] && echo "<tr>"
+    echo "<td><a href=\"/cgi-bin/auth.cgi?SCR=$SCR&DO=ESC&ESC_ID=$ESC_ID\">$ESC_NAME</a></td><td>$SERVICE</TD>"
+    [[ $i == 1 ]] && { echo "</tr>"; i=0; }
+    i=$(($i+1))
+  done< <(echo "select E.esc_id,E.name,S.name from escalations E,services S where E.service_id=S.service_id or E.service_id is null order by E.name" | sql_query)
+  echo "</table>"
+  exit 0
+}
+
+[[ $DO == UPDATE ]] && {
+  #echo "$QUERY_STRING"
+  ESC_EXIST=$(echo "select esc_id from escalations where esc_id='$ESC_ID';" |sql_query)
+  [[ -z $ESC_EXIST ]] && ERROR="$ERROR <br> That escalation does not exist" || {
+
+    [[ ${#NEW_NAME} -gt 512 ]] && ERROR="$ERROR<br>Your escalation name is too long. Please pick something shorter"
+    [[ ! -z "$(echo "${NEW_NAME}" | tr -d "[ A-Za-z0-9+_.\-]")" ]] && ERROR="$ERROR <br> Invalid charcters in your escalation name"
+    UPDATE="$UPDATE|NAME='$NEW_NAME'"
+
+    NEW_SERVICE_ID=$(echo "select service_id from services where name='$NEW_SERVICE';"|sql_query)
+    [[ -z $NEW_SERVICE_ID ]] && ERROR="$ERROR <br> That service does not exist"
+    UPDATE="$UPDATE|service_id='$NEW_SERVICE_ID'"
+
+    [[ -n $NEW_CONTACT_GROUP_ID ]] && {
+      NEW_CONTACT_GROUP_ID=$(echo "select contact_group_id from contact_groups where name='$NEW_CONTACT_GROUP';"|sql_query)
+      echo "select contact_group_id from contact_groups where name='$NEW_CONTACT_GROUP';"
+      [[ -z $NEW_CONTACT_GROUP_ID ]] && ERROR="$ERROR <br> That group does not exist"
+    }
+    alter_contact_group $(echo "select contact_groups from escalations where esc_id='$ESC_ID';" | sql_query)
+
+
+
+  [[ ${#NEW_FIRST_NOTE} -gt 256 ]] && ERROR="$ERROR<br>Your First Notification is too long. Please pick something shorter"
+  [[ ${#NEW_SECOND_NOTE} -gt 256 ]] && ERROR="$ERROR<br>Your Second Notification is too long. Please pick something shorter"
+  [[ ${#NEW_NOTE_INTERVAL} -gt 256 ]] && ERROR="$ERROR<br>Your Notification Interval is too long. Please pick something shorter"
+  [[ ${#NEW_ESC_PERIOD} -gt 256 ]] && ERROR="$ERROR<br>Your Escalation Period is too long. Please pick something shorter"
+  [[ ${#NEW_ESC_OPTIONS} -gt 256 ]] && ERROR="$ERROR<br>Your Escalation Options is too long. Please pick something shorter"
+  [[ ${#NEW_INT_NOTE} -gt 2048 ]] && ERROR="$ERROR<br>Your Internal Note is too long. Please pick something shorter"
+  [[ ! -z "$(echo "${NEW_FIRST_NOTE}" | tr -d "[ A-Za-z0-9,+_.\-]")" ]] && ERROR="$ERROR <br> Invalid charcters in your First Notification"
+  [[ ! -z "$(echo "${NEW_SECOND_NOTE}" | tr -d "[ A-Za-z0-9,+_.\-]")" ]] && ERROR="$ERROR <br> Invalid charcters in your Second Notification"
+  [[ ! -z "$(echo "${NEW_NOTE_INTERVAL}" | tr -d "[ A-Za-z0-9,+_.\-]")" ]] && ERROR="$ERROR <br> Invalid charcters in your Notification Interval"
+  [[ ! -z "$(echo "${NEW_ESC_PERIOD}" | tr -d "[ A-Za-z0-9,+_.\-]")" ]] && ERROR="$ERROR <br> Invalid charcters in your Escalation Period"
+  [[ ! -z "$(echo "${NEW_ESC_OPTIONS}" | tr -d "[ A-Za-z0-9,+_.\-]")" ]] && ERROR="$ERROR <br> Invalid charcters in your Escalation Options"
+  [[ ! -z "$(echo "${NEW_INT_NOTE}" | tr -d "[ A-Za-z0-9!@#%$^&*,()+_.\-]")" ]] && ERROR="$ERROR <br> Invalid charcters in your Internal Note"
+  [[ -n $NEW_FIRST_NOTE ]] && UPDATE="$UPDATE|first_note='$NEW_FIRST_NOTE'"
+  [[ -n $NEW_SECOND_NOTE ]] && UPDATE="$UPDATE|second_note='$NEW_SECOND_NOTE'"
+  [[ -n $NEW_NOTE_INTERVAL ]] && UPDATE="$UPDATE|note_interval='$NEW_NOTE_INTERVAL'"
+  [[ -n $NEW_ESC_PERIOD ]] && UPDATE="$UPDATE|esc_period='$NEW_ESC_PERIOD'"
+  [[ -n $NEW_ESC_OPTIONS ]] && UPDATE="$UPDATE|esc_options='$NEW_ESC_OPTIONS'"
+  [[ -n $NEW_INT_NOTE ]] && UPDATE="$UPDATE|int_note='$NEW_INT_NOTE'"
+
+    ## make changes
+    [[ -z $ERROR ]] && {
+      UPDATE_SQL=$(echo $UPDATE | sed 's/^|*//;s/|*$//;s/|/,/g')
+      echo "update escalations set $UPDATE_SQL where esc_id='$ESC_ID';" | sql_update
+    }
+  }
+  DO=ESC
+}
+
+[[ $DO == ESC ]] && {
+  get_contact_groups
+  get_services
+
+  IFS="|" read NAME SERVICE_ID SERVICE_NAME CONTACT_GROUPS FIRST_NOTE SECOND_NOTE NOTE_INTERVAL ESC_PERIOD ESC_OPTIONS _ <<< "$(echo "select E.name,E.service_id,S.name,E.contact_groups,E.first_note,E.second_note,E.note_interval,E.esc_period,E.esc_options from escalations E,services S where E.service_id=S.service_id AND E.esc_id='$ESC_ID';" | sql_query)"
+	  #Contact Group: <input type=text name="NEW_CONTACT_GROUP" value="$CONTACT" size="100"><br>
+	[[ -z $SERVICE_ID ]] && SERVICE_ID=0
+	cat <<- EOF
+	  <p id=error>$ERROR</p>
+	  <form method=POST action=/cgi-bin/auth.cgi>
+	  <center><b>$BUILD_NAME</b></center>
+	  <br>
+	  Name: <input type=text name="NEW_NAME" value="$NAME" size="100"><br>
+	  $(request_service $SERVICE_ID)
+	  $(show_contact_groups $CONTACT_GROUPS)
+	  First notification: <input type=text name="NEW_FIRST_NOTE" value="$FIRST_NOTE" size="100"><br>
+	  Second notification: <input type=text name="NEW_SECOND_NOTE" value="$SECOND_NOTE" size="100"><br>
+	  Notification Interval: <input type=text name="NEW_NOTE_INTERVAL" value="$NOTE_INTERVAL" size="100"><br>
+	  Escalation Period: <input type=text name="NEW_ESC_PERIOD" value="$ESC_PERIOD" size="100"><br>
+	  Escalation Options: <input type=text name="NEW_ESC_OPTIONS" value="$ESC_OPTIONS" size="100"><br>
+
+	  <br>
+	  <input type=hidden name=SCR value=$SCR>
+	  <input type=hidden name=DO value=UPDATE>
+	  <input type=hidden name=ESC_ID value=$ESC_ID>
+	  <input type=submit value="Update This Escalation">
+	  </form><br>
+	  <form method=POST action=/cgi-bin/auth.cgi>
+	  <input type=hidden name=SCR value=$SCR>
+	  <input type=hidden name=DO value=DELETE>
+	  <input type=hidden name=ESC_ID value=$ESC_ID>
+	  <input type=submit value="Delete This Escalation">
+	  </form><br>
+	EOF
+}

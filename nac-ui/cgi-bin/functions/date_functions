@@ -1,0 +1,60 @@
+
+EPOCH_DATE="$(date +%s)"
+LOG_DATE=$(date "+%m/%d/%Y %H:%M:%S")
+TIMESTAMP="$(date +"%Y-%m-%d %H:%M:%S")"
+
+###########################################################
+## Calculate someones age by their birthday
+
+show_age() {
+	#BDAY=${1//\// }
+	BDAY_YEAR=${1%%-*}
+	BDAY_MONTH=$(echo $1 | cut -d "-" -f "2")
+	BDAY_DAY=${1##*-}
+	#[ "$BDAY_DAY" -lt 10 ] && BDAY_DAY="0$BDAY_DAY"
+	#[ "$BDAY_MONTH" -lt 10 ] && BDAY_MONTH="0$BDAY_MONTH"
+	BIRTHDAY_SECOND=$(date -j $BDAY_YEAR$BDAY_MONTH${BDAY_DAY}0000 +%s)
+	[ "$BIRTHDAY_SECOND" -gt 0 ] && echo "($(date +%s)-$BIRTHDAY_SECOND)/31536000"  | bc
+	[ "$BIRTHDAY_SECOND" -lt 0 ] && echo "($(date +%s)+${BIRTHDAY_SECOND#-})/31536000"  | bc
+	}
+
+###########################################################
+## allow someone to select their birthday
+
+select_birthday() {
+cat << EOF
+	<select name=BIRTHDAY_MONTH>
+	<option value=$BIRTHDAY_MONTH>$BIRTHDAY_REAL_MONTH</option>
+	<option value="1">Jan</option> <option value="2">Feb</option> <option value="3">Mar</option> <option value="4">Apr</option> <option value="5">May</option> <option value="6">Jun</option>
+	<option value="7">Jul</option> <option value="8">Aug</option> <option value="9">Sep</option> <option value="10">Oct</option> <option value="11">Nov</option> <option value="12">Dec</option>
+	</select>/<select name=BIRTHDAY_DAY>
+
+	<option value=$BIRTHDAY_DAY>$BIRTHDAY_DAY</option>
+EOF
+	MON=1
+	while [ "$MON" -le 31 ] ; do
+		echo "<option value=$MON>$MON</option>"
+		MON=$(($MON+1))
+	done
+cat << EOF
+	</select>/
+	<select name=BIRTHDAY_YEAR>
+	<option value=$BIRTHDAY_YEAR>$BIRTHDAY_YEAR</option>
+EOF
+	YR=$(($CURR_YEAR-20))
+	while [ "$YR" -gt 1910 ] ; do
+		echo "<option value=$YR>$YR</option>"
+		YR=$(($YR-1))
+	done
+	echo "</select>"
+	}
+
+norm_date() {
+	[ ! -z "$1" ] && date -jf %s $1 "+%m/%d/%Y %H:%M"
+	}
+mysql_curr_date() {
+	date "+%Y-%m-%d"
+	}
+mysql_curr_datetime() {
+	date "+%Y-%m-%d %H:%M:%S"
+	}

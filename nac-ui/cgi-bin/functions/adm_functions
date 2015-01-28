@@ -1,0 +1,84 @@
+
+###############################################
+### Moving from one section to another
+
+read_admin_info () {
+	ADMIN=$1
+	IFS="|" read _ UA CI AD ST SI _ <<< "$(grep "^$ADMIN|" $ADMIN_FILE)"
+	[[ -z $UA ]] && UA=0
+	[[ -z $CI ]] && CI=0
+	[[ -z $AD ]] && AD=0
+	[[ -z $ST ]] && ST=0
+	[[ -z $SI ]] && SI=0
+}
+
+set_admin_info () {
+	USERNAME=$1
+	USER=$2
+	[[ -z $UA ]] && UA=0
+	[[ -z $CI ]] && CI=0
+	[[ -z $AD ]] && AD=0
+	[[ -z $ST ]] && ST=0
+	[[ -z $SI ]] && SI=0
+	[[ -z "$(grep "^$USERNAME|" $ADMIN_FILE)" && ( $UA != 0 || $CI != 0 || $AD != 0 || $ST != 0 || $SI != 0 ) ]] && echo "$(echo $USERNAME| tr [:upper:] [:lower:])|$UA|$CI|$AD|$ST|$SI" >> $ADMIN_FILE
+	[[ $UA == 0 && $CI == 0 && $AD == 0 && $ST == 0 && $SI == 0 ]] && sed -i "" "/^$USERNAME|/d" $ADMIN_FILE
+	sed -i "" "s/^\($USERNAME|\).*$/\1$UA|$CI|$AD|$ST|$SI/" $ADMIN_FILE
+	[[ -z $(grep "^$USERNAME:" $PASSWD_FILE ) ]] && echo "${USERNAME}:!!:${USER}" >> $PASSWD_FILE
+	echo "update users set username='$USERNAME' where badge_number='$USER';" | sql_update
+}
+
+set_username () {
+	USER=$1
+	IFS="|" read SET_USERNAME FIRST_NAME LAST_NAME <<< "$(echo "select username,first_name,last_name from users where badge_number='$USER'"| sql_query)"
+	[[ $SET_USERNAME == NULL || -z $SET_USERNAME ]] && {
+		SET_USERNAME=$(echo "${FIRST_NAME}${LAST_NAME:0:1}")
+		USERNAME_LENGTH=${#SET_USERNAME}
+		COUNT=0
+		while [[ ! -z $(echo "select username from users where username='$SET_USERNAME'"| sql_update) ]] ; do
+			SET_USERNAME=${SET_USERNAME:0:$USERNAME_LENGTH}$((++$COUNT))
+		done
+	}
+	echo $SET_USERNAME
+}
+
+check_perms() {
+CHECK_USER=$1
+[[ -z $SUBS ]] && SUBS=0
+SET_USERNAME=$(set_username $USER)
+read_admin_info "$SET_USERNAME"
+[[ $UA == 0 ]] && UA=1
+[[ $AD < 3 ]] && {
+### If they are no longer in a department, remove their rights.
+	COUNT_SUBS=0
+	THIS_VOL=$(echo "select count(*) from ${CURR_YEAR}_volunteer where badge_number='$USER';" | sql_query )
+	THIS_PER=$(echo "select count(*) from ${CURR_YEAR}_performer where badge_number='$USER';" | sql_query )
+	THIS_PRE=$(echo "select count(*) from ${CURR_YEAR}_presenter where badge_number='$USER';" | sql_query )
+	THIS_EXH=$(echo "select count(*) from ${CURR_YEAR}_exhibitor where badge_number='$USER';" | sql_query )
+	[[ $THIS_VOL == 0 && $THIS_PER == 0 && $THIS_PRE == 0 && $THIS_EXH == 0 ]] && {
+		AD=0
+	} || {
+### change rights if they have subordinates
+		SUB_NUM=0
+		while IFS="|" read X_COMP X_DISC X_FULL ; do 
+			[[ ! -z X_COMP ]] && SUB_NUM=$(($X_COMP+$SUB_NUM))
+			[[ ! -z X_DISC ]] && SUB_NUM=$(($X_DISC+$SUB_NUM))
+			[[ ! -z X_FULL ]] && SUB_NUM=$(($X_FULL+$SUB_NUM))
+		done< <(echo "select sub_comp,sub_disc,sub_full from ${CURR_YEAR}_volunteer where badge_number='$USER'
+				select sub_comp,sub_disc,sub_full from ${CURR_YEAR}_performer where badge_number='$USER'
+				select sub_comp,sub_disc,sub_full from ${CURR_YEAR}_presenter where badge_number='$USER'
+				select sub_comp,sub_disc,sub_full from ${CURR_YEAR}_exhibitor where badge_number='$USER';" |sql_query )
+	
+		[[ $SUB_NUM < 1 ]] && {
+			AD=1
+			for X in volunteer performer presenter exhibitor ; do
+				echo "delete from ${CURR_YEAR}_$X where lead='$USER';" | sql_update
+			done
+		} || {
+			AD=2
+		}
+	}
+	set_admin_info "$SET_USERNAME" "$USER"
+    }
+}
+
+

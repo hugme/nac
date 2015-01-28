@@ -1,0 +1,116 @@
+#!/bin/bash
+
+# set some variables
+. $(cat varset)
+
+use_admin_functions
+use_base_functions
+use_bust_functions
+use_date_functions
+
+
+#echo $QUERY_STRING
+for X in  ${QUERY_STRING//&/ }; do
+  case $X in
+    SCR=*) SCR=${X#*=};;
+    DO=*) DO=${X#*=};;
+    ROLE_ID=*) ROLE_ID=${X#*=};;
+  esac
+done
+
+########
+## Print the main page
+
+[[ -z $DO || $DO == SHOW ]] && {
+  # we are going to count the number of servers in each role
+  unset ROLE_ID_COUNT
+
+	  echo "<p id=error>Warning!!<br>You are deleting a role!!</p>"
+
+  while IFS="|" read CURR_ID _ ; do
+   [[ -z $SERVER_COUNT[CURR_ID]} ]] && SERVER_COUNT[CURR_ID]=1 || SERVER_COUNT[CURR_ID]=$((${SERVER_COUNT[CURR_ID]}+1))
+  done< <(echo "select r.role_id from role r,servers s where r.role_id=s.role order by role_id;" | sql_query)
+
+  echo "<table border=1 cellspacing=0 cellpadding=2>"
+  echo "<tr><td>Role Name</td><td>Server<br>Count</td><td>Service<br>Count</td><td></td>"
+  echo "<td>Role Name</td><td>Server<br>Count</td><td>Service<br>Count</td><td></td>"
+  echo "<td>Role Name</td><td>Server<br>Count</td><td>Service<br>Count</td></tr>"
+  i=1
+  while IFS="|" read ROLE_ID ROLE SERVICES _ ; do 
+   unset CHANGE_COLOR
+   SERVICE_COUNT=$(echo $SERVICES | wc -w)
+   [[ -z ${SERVER_COUNT[ROLE_ID]} ]] && SERVER_COUNT[ROLE_ID]=0
+   [[ -n $ROLE ]] && {
+    [[ $i == 0 ]] && echo "<tr>"
+     [[ ${SERVER_COUNT[ROLE_ID]} == 0 && $SERVICE_COUNT == 0 ]] && {
+      echo "<td bgcolor=yellow><a href=\"/cgi-bin/auth.cgi?SCR=$SCR&DO=CHECK&ROLE_ID=$ROLE_ID\">$ROLE</a></td>"
+      echo "<td bgcolor=yellow>${SERVER_COUNT[ROLE_ID]}</td>"
+      echo "<td bgcolor=yellow>$SERVICE_COUNT</td>"
+     } || {
+      echo "<td>$ROLE</td>"
+      echo "<td>${SERVER_COUNT[ROLE_ID]}</td>"
+      echo "<td>$SERVICE_COUNT</td>"
+     }
+    [[ $i == 1 || $i == 2 ]] && echo "<td bgcolor=#AAAAAA>&nbsp;&nbsp;&nbsp;&nbsp;</td>"
+    [[ $i == 3 ]] && { echo "</tr>"; i=0; }
+    i=$(($i+1))
+   }
+  done< <(echo "select role_id,name,services from role order by name" | sql_query)
+  echo "</table>"
+
+  exit 0
+}
+
+
+[[ -z $DO || $DO == CHECK ]] && {
+
+ IFS="|" read DELETE_ROLE_NAME _ <<< "$(echo "select name,services from role where role_id=$ROLE_ID" | sql_query)"
+
+cat << EOF
+<p id=error>
+ Are you sure you want to delete:
+  <br>ROLE ID: $ROLE_ID
+  <br>ROLE NAME: $DELETE_ROLE_NAME
+ </p>
+
+ <center>
+ <a href="/cgi-bin/auth.cgi?SCR=role_delete&DO=DELETE&ROLE_ID=$ROLE_ID">Yes, delete this role</a>
+  &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+ <a href="/cgi-bin/auth.cgi?SCR=role_edit">No, do not delete this role</a>
+ </center>
+EOF
+
+}
+
+[[ -z $DO || $DO == DELETE ]] && {
+
+ IFS="|" read DELETE_ROLE_NAME SERVICES _ <<< "$(echo "select name,services from role where role_id=$ROLE_ID" | sql_query)"
+
+ while IFS="|" read CURR_ID _ ; do
+  [[ -z $SERVER_COUNT[CURR_ID]} ]] && SERVER_COUNT[CURR_ID]=1 || SERVER_COUNT[CURR_ID]=$((${SERVER_COUNT[CURR_ID]}+1))
+ done< <(echo "select r.role_id from role r,servers s where r.role_id=s.role order by role_id;" | sql_query)
+
+[[ -z ${SERVER_COUNT[ROLE_ID]} && -z $SERVICE_COUNT ]] && {
+echo "delete from role where role_id='$ROLE_ID'" | sql_update
+TEST=$(echo "select role_id from role where role_id='$ROLE_ID'" | sql_query)
+[[ -z $TEST ]] && {
+cat << EOF
+<p id=error>
+ The role $DELETE_ROLE_NAME has been deleted
+<center><a href="/cgi-bin/auth.cgi?SCR=role_edit">Back to Roles</a><center>
+</p>
+EOF
+ } || {
+ echo "<p id=error> The role deletion failed<\p>" 
+ }
+} || {
+cat << EOF
+<p id=error>
+ The role $DELETE_ROLE_NAME counld not be deleted because it contains at least one service or server
+</p>
+<center><a href="/cgi-bin/auth.cgi?SCR=role_edit">Try Again</a><center>
+EOF
+}
+
+
+}

@@ -1,0 +1,186 @@
+body { background-color:#fff;
+	color:#000; }
+
+/* ###################################################
+## These are all the CSS tags which set the top bar ##
+################################################### */
+
+small { font-size:.6em; }
+b { font-size:1.4em; }
+
+a.icon { text-decoration:none;
+	height:35px;
+	color:#4040ab; }
+img.icon { height:30px;
+	border: 0 none; }
+div.top { width:100%;
+	background-color:#000000;
+	height:50px;
+	top:0px;
+	left:0px; 
+	z-index:100;
+	text-align:center; }
+div.topinner { margin-left:auto;
+	background-color:#333333;
+	width:1200px;
+	height:40px;
+	position:relative;
+	top:10px;
+	margin-right:auto;
+	padding:0;
+	text-transform:uppercase;
+	overflow:hidden; }
+div.top3 { position:relative;
+	top:3px;
+	width:800px;
+	height:0px;
+	padding:0px; }
+h3.top { padding:0;
+	float:left;
+	font-size:1em;
+	color:#00BAE1;
+	text-transform:uppercase; }
+ul.top { list-style-type:none;
+	float:right;
+	margin-left:auto;
+	margin-right:auto;
+	padding:0;
+	overflow:hidden; 
+	width:500px; }
+li.top { float:right; }
+a.top { display:block;
+	height:24px;
+	text-decoration:none;
+	width:80px;
+	font-size:.8em;
+	color:white; }
+
+/* ####################################
+## This is the main part of the page ##
+#################################### */
+
+
+div.center { margin-left:auto;
+	margin-right:auto;
+	width:1200px;
+	position:relative;
+	top:50px;
+	padding:0;
+	z-index:5;
+	color:black; }
+div.menu { width:200px;
+	padding:0px;
+	position:relative;
+	left:0px;
+	top:5px;
+  background-color:#FFF;
+  background-image: url('/images/nac-background.jpg');
+	color:black; }
+p.menu { font-size:.7em;
+	right:8px;
+  width:199px;
+  padding:10px;
+  background-color:#black;
+  color:white;
+  opacity:1;
+  }
+a.menu { font-size:1em;
+	color:#00bae1;
+	text-decoration:none; }
+a.smenu { font-size:1.8em;
+	color:#1010F0;
+	text-decoration:none; }
+div.smenu { margin-left:auto;
+	margin-right:auto;
+	position:relative;
+	left:150px;
+	padding:10; }
+div.content { font-size:.9em;
+	width:800px;
+	position:absolute;
+	top:0px;
+	left:230px;
+	padding:8px; }
+p.content { font-size:.9em;
+	width:800px;
+	position:absolute;
+	top:0px;
+	left:230px;
+	padding:8px; }
+table.content { border-collapse:collapse; }
+th.content { border:2px solid black;
+	padding:3px }
+td.content { border:1px solid black;
+	padding:3px }
+
+table.form { border-collapse:collapse;
+	border:0px}
+th.form { border:0px;
+	padding:3px }
+td.form { border:0px;
+	padding:3px }
+
+
+
+
+
+/* #####################################
+## If there is no menu (not yet auth) ##
+##################################### */
+div.single { margin-left:auto;
+	margin-right:auto;
+	width:800px;
+	position:relative;
+	top:50px;
+	padding:0;
+	z-index:5;
+	text-align:left }
+
+/* ########################################
+## These are special for the signin page ##
+######################################## */
+
+h2.signin { font-size:3em; }
+a.signin:link {color:#5050ff;
+	text-decoration:none; }
+a.signin:visited {color:#5050ff;
+	text-decoration:none; }
+a.signin:hover {color:#7070ff;
+	text-decoration:none; }
+a.signin:active {color:#5050ff;
+	text-decoration:none; }
+	
+
+/* #########################
+## some other font styles ##
+######################### */
+
+dir.tiny { font-size:.7em;
+	font-family:"Times New Roman", Times, serif; }
+#error { color:red;
+	font-family:Georgia, serif;
+	font-size:1.3em;
+	text-align:center; }
+
+/* #################################################
+## these are to list the hours on the shifts page ##
+################################################# */
+a.shift:link {color:#202055;
+	background-color:#FFFFFF;
+	text-decoration:none; }
+a.shift:visited {color:#5050ff;
+	background-color:#FFFFFF;
+	text-decoration:none; }
+a.shift:hover {color:#7070ff;
+	background-color:#FFFFFF;
+	text-decoration:none; }
+a.shift:active {color:#5050ff;
+	background-color:#FFFFFF;
+	text-decoration:none; }
+
+/* ##############################
+## these are for the EMT pages ##
+################################# */
+b.emt {font-size:1.1em; }
+small.emt {font-size:0.9em;
+	color:#050505;}

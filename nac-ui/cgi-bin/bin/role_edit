@@ -1,0 +1,277 @@
+#!/bin/bash
+
+# set some variables
+. $(cat varset)
+
+use_admin_functions
+use_base_functions
+use_bust_functions
+use_date_functions
+
+#echo $QUERY_STRING
+for X in  ${QUERY_STRING//&/ }; do
+  case $X in
+    SCR=*) SCR=${X#*=};;
+    DO=*) DO=${X#*=};;
+    ROLE_ID=*) ROLE_ID=${X#*=};;
+    DELETE_SRV=*) [[ -z $DELETE_SRV ]] && DELETE_SRV="${X#*=}" ||  DELETE_SRV="${DELETE_SRV}|${X#*=}";;
+    DELETE_ESC=*) [[ -z $DELETE_SRV ]] && DELETE_ESC="${X#*=}" ||  DELETE_ESC="${DELETE_ESC}|${X#*=}";;
+    DELETE_DEP=*) [[ -z $DELETE_SRV ]] && DELETE_DEP="${X#*=}" ||  DELETE_DEP="${DELETE_DEP}|${X#*=}";;
+    NEW_SRV=*) NEW_SRV=${X#*=};;
+    NEW_ESC=*) NEW_ESC=${X#*=};;
+    NEW_DEP=*) NEW_DEP=${X#*=};;
+    NEW_HOST_TEMPLATE=*) NEW_HOST_TEMPLATE=${X#*=};;
+  esac
+done
+
+########
+## Print the main page
+
+[[ -z $DO || $DO == SHOW ]] && {
+  # we are going to count the number of servers in each role
+  unset ROLE_ID_COUNT
+  while IFS="|" read CURR_ID _ ; do
+   [[ -z $SERVER_COUNT[CURR_ID]} ]] && SERVER_COUNT[CURR_ID]=1 || SERVER_COUNT[CURR_ID]=$((${SERVER_COUNT[CURR_ID]}+1))
+  done< <(echo "select r.role_id from role r,servers s where r.role_id=s.role order by role_id;" | sql_query)
+
+  echo "<table border=1 cellspacing=0 cellpadding=2>"
+  echo "<tr><td>Role Name</td><td>Server<br>Count</td><td>Service<br>Count</td><td></td>"
+  echo "<td>Role Name</td><td>Server<br>Count</td><td>Service<br>Count</td><td></td>"
+  echo "<td>Role Name</td><td>Server<br>Count</td><td>Service<br>Count</td></tr>"
+  i=1
+  while IFS="|" read ROLE_ID ROLE SERVICES _ ; do 
+   unset CHANGE_COLOR
+   SERVICE_COUNT=$(echo $SERVICES | wc -w)
+   [[ -z ${SERVER_COUNT[ROLE_ID]} ]] && { SERVER_COUNT[ROLE_ID]=0 ; CHANGE_COLOR[0]="bgcolor=yellow" ; CHANGE_COLOR[1]="bgcolor=yellow" ; }
+   [[ $SERVICE_COUNT == 0 ]] && { CHANGE_COLOR[0]="bgcolor=yellow" ; CHANGE_COLOR[2]="bgcolor=yellow"; }
+   [[ ! -z $ROLE ]] && {
+    [[ $i == 0 ]] && echo "<tr>"
+    echo "<td ${CHANGE_COLOR[0]}><a href=\"/cgi-bin/auth.cgi?SCR=$SCR&DO=ROLE&ROLE_ID=$ROLE_ID\">$ROLE</a></td>"
+    echo "<td ${CHANGE_COLOR[1]}>${SERVER_COUNT[ROLE_ID]}</td>"
+    echo "<td ${CHANGE_COLOR[2]}>$SERVICE_COUNT</td>"
+    [[ $i == 1 || $i == 2 ]] && echo "<td bgcolor=#AAAAAA>&nbsp;&nbsp;&nbsp;&nbsp;</td>"
+    [[ $i == 3 ]] && { echo "</tr>"; i=0; }
+    i=$(($i+1))
+   }
+  done< <(echo "select role_id,name,services from role order by name" | sql_query)
+cat << EOF
+  </table>
+  <br><br>
+  <center><a href="/cgi-bin/auth.cgi/?SCR=role_delete">Delete a role</a></center>
+EOF
+
+  exit 0
+}
+
+########
+## make updates if requested
+
+[[ $DO == UPDATE ]] && {
+
+  [[ -n "$DELETE_SRV" ]] && {
+    SRV_FOR_HOST=$(echo "select services from ROLE where role_id='$ROLE_ID';"|sql_query)
+    NEW_SERVICE_LIST=$SRV_FOR_HOST
+    while IFS="|" read DEL_SRV ; do
+      unset CHECK_EXIST
+      for CHECK_SERVICE in $NEW_SERVICE_LIST ; do [[ $DEL_SRV == $CHECK_SERVICE ]] && CHECK_EXIST=YES; done
+      [[ $CHECK_EXIST != YES ]] && ERROR="$ERROR That service does not exist in this role"
+      [[ -z $ERROR ]] && {
+	unset BUILD_SERV_LIST
+      	for CHECK_SERVICE in $NEW_SERVICE_LIST ; do
+	  [[ ! $DEL_SRV == $CHECK_SERVICE ]] && { [[ -z $BUILD_SERV_LIST ]] && BUILD_SERV_LIST=$CHECK_SERVICE || BUILD_SERV_LIST="$BUILD_SERV_LIST $CHECK_SERVICE"; }
+	done
+	NEW_SERVICE_LIST=$BUILD_SERV_LIST
+      }
+    done< <(echo $DELETE_SRV| tr "|" "\n")
+    #[[ ${#NEW_SERVICE_LIST} -lt 2 ]] && ERROR="$ERROR<br>Too many services have been lost. Please contact your monitoring team"
+    SRV_CHANGE_AVERAGE=$(echo "scale=10;((${#SRV_FOR_HOST}-${#NEW_SERVICE_LIST})/${#SRV_FOR_HOST})*100" | bc | cut -d "." -f 1)
+    [[ $SRV_CHANGE_AVERAGE -gt 50 && ${#NEW_SERVICE_LIST} -gt 2 ]] && ERROR="$ERROR<br>You are attempting to make too large of a change.  Please contact your monitoring team"
+    [[ -z $ERROR ]] && {
+      echo "update role set services='$NEW_SERVICE_LIST' where role_id='$ROLE_ID';"|sql_update
+      #echo "update role set services='$NEW_SERVICE_LIST' where role_id='$ROLE_ID';"
+      echo "$LOG_DATE $USERNAME MANUAL RM_ROLE_SERVICE $ROLE delete:$(echo $DELETE_SRV| tr "|" " ") ; OLD:$SRV_FOR_HOST NEW:$NEW_SERVICE_LIST " >> $ACTIVITY_LOG
+    }
+  }
+  [[ -n "$DELETE_ESC" ]] && {
+    ESC_FOR_HOST=$(echo "select escalations from ROLE where role_id='$ROLE_ID';"|sql_query)
+    NEW_ESC_LIST=$ESC_FOR_HOST
+    while IFS="|" read DEL_ESC ; do
+      unset CHECK_EXIST
+      for CHECK_ESC in $NEW_ESC_LIST ; do [[ $DEL_ESC == $CHECK_ESC ]] && CHECK_EXIST=YES; done
+      [[ $CHECK_EXIST != YES ]] && ERROR="$ERROR That escalation does not exist in this role"
+      [[ -z $ERROR ]] && {
+	unset BUILD_ESC_LIST
+      	for CHECK_ESC in $NEW_ESC_LIST ; do
+	  [[ ! $DEL_ESC == $CHECK_ESC ]] && { [[ -z $BUILD_ESC_LIST ]] && BUILD_ESC_LIST=$CHECK_ESC || BUILD_ESC_LIST="$BUILD_ESC_LIST $CHECK_ESC"; }
+	done
+	NEW_ESC_LIST=$BUILD_ESC_LIST
+      }
+    done< <(echo $DELETE_ESC| tr "|" "\n")
+    [[ ${#NEW_ESC_LIST} -lt 2 ]] && ERROR="$ERROR<br>Too many escalations have been lost. Please contact your monitoring team"
+    ESC_CHANGE_AVERAGE=$(echo "scale=10;((${#ESC_FOR_HOST}-${#NEW_ESC_LIST})/${#ESC_FOR_HOST})*100" | bc | cut -d "." -f 1)
+    [[ $ESC_CHANGE_AVERAGE -gt 50 ]] && ERROR="$ERROR<br>You are attempting to make too large of a change.  Please contact your monitoring team"
+    [[ -z $ERROR ]] && {
+      #echo "update role set escalations='$NEW_ESC_LIST' where role_id='$ROLE_ID';"|sql_update
+      echo "update role set escalations='$NEW_ESC_LIST' where role_id='$ROLE_ID';"
+      echo "$LOG_DATE $USERNAME MANUAL RM_ROLE_ESCALATION $ROLE delete:$(echo $DELETE_ESC| tr "|" " ") ; OLD:$ESC_FOR_HOST NEW:$NEW_ESC_LIST " >> $ACTIVITY_LOG
+    }
+  }
+  [[ -n "$DELETE_DEP" ]] && {
+    DEP_FOR_HOST=$(echo "select deps from ROLE where role_id='$ROLE_ID';"|sql_query)
+    NEW_DEP_LIST=$DEP_FOR_HOST
+    while IFS="|" read DEL_DEP ; do
+      unset CHECK_EXIST
+      for CHECK_DEP in $NEW_DEP_LIST ; do [[ $DEL_DEP == $CHECK_DEP ]] && CHECK_EXIST=YES; done
+      [[ $CHECK_EXIST != YES ]] && ERROR="$ERROR That dependancy does not exist in this role"
+      [[ -z $ERROR ]] && {
+	unset BUILD_DEP_LIST
+      	for CHECK_DEP in $NEW_DEP_LIST ; do
+	  [[ ! $DEL_DEP == $CHECK_DEP ]] && { [[ -z $BUILD_DEP_LIST ]] && BUILD_DEP_LIST=$CHECK_DEP || BUILD_DEP_LIST="$BUILD_DEP_LIST $CHECK_DEP"; }
+	done
+	NEW_DEP_LIST=$BUILD_DEP_LIST
+      }
+    done< <(echo $DELETE_DEP| tr "|" "\n")
+    [[ ${#NEW_DEP_LIST} -lt 2 ]] && ERROR="$ERROR<br>Too many dependancies have been lost. Please contact your monitoring team"
+    DEP_CHANGE_AVERAGE=$(echo "scale=10;((${#DEP_FOR_HOST}-${#NEW_DEP_LIST})/${#DEP_FOR_HOST})*100" | bc | cut -d "." -f 1)
+    [[ $DEP_CHANGE_AVERAGE -gt 50 ]] && ERROR="$ERROR<br>You are attempting to make too large of a change.  Please contact your monitoring team"
+    [[ -z $ERROR ]] && {
+      #echo "update role set deps='$NEW_DEP_LIST' where role_id='$ROLE_ID';"|sql_update
+      echo "update role set deps='$NEW_DEP_LIST' where role_id='$ROLE_ID';"
+      echo "$LOG_DATE $USERNAME MANUAL RM_ROLE_DEPENDANCY $ROLE delete:$(echo $DELETE_DEP| tr "|" " ") ; OLD:$DEP_FOR_HOST NEW:$NEW_DEP_LIST " >> $ACTIVITY_LOG
+    }
+  }
+  [[ -n "$NEW_SRV" ]] && {
+    NEW_SRV_ID=$(echo "select service_id from services where name='${NEW_SRV//+/ }';"|sql_query)
+    SRV_FOR_HOST=$(echo "select services from ROLE where role_id='$ROLE_ID';"|sql_query)
+    unset CHECK_EXIST
+    for CHECK_SERVICE in $SRV_FOR_HOST ; do [[ $NEW_SRV_ID == $CHECK_SERVICE ]] && CHECK_EXIST=YES; done
+    [[ $CHECK_EXIST == YES ]] && ERROR="$ERROR That service does not exist in this role"
+    [[ -z $ERROR ]] && {
+      NEW_SERVICE_LIST="$SRV_FOR_HOST $NEW_SRV_ID"
+      echo "update role set services='$NEW_SERVICE_LIST' where role_id='$ROLE_ID';" | sql_update
+      echo "$LOG_DATE $USERNAME MANUAL ADD_ROLE_SERVICE $ROLE $NEW_SRV_ID" >> $ACTIVITY_LOG
+    }
+  }
+  [[ -n "$NEW_ESC" ]] && {
+    NEW_ESC_ID=$(echo "select esc_id from escalations where name='${NEW_ESC//+/ }';"|sql_query)
+    ESC_FOR_HOST=$(echo "select escalations from ROLE where role_id='$ROLE_ID';"|sql_query)
+    unset CHECK_EXIST
+    for CHECK_ESC in $ESC_FOR_HOST ; do [[ $NEW_ESC_ID == $CHECK_SERVICE ]] && CHECK_EXIST=YES; done
+    [[ $CHECK_EXIST == YES ]] && ERROR="$ERROR That escalation does not exist in this role"
+    [[ -z $ERROR ]] && {
+      NEW_ESC_LIST="$ESC_FOR_HOST $NEW_ESC_ID"
+      echo "update role set escalations='$NEW_ESC_LIST' where role_id='$ROLE_ID';" | sql_update
+      echo "$LOG_DATE $USERNAME MANUAL ADD_ROLE_ESC $ROLE $NEW_ESC_ID" >> $ACTIVITY_LOG
+    }
+  }
+  [[ -n "$NEW_DEP" ]] && {
+    NEW_DEP_ID=$(echo "select dep_id from deps where name='${NEW_DEP//+/ }';"|sql_query)
+    DEP_FOR_HOST=$(echo "select deps from ROLE where role_id='$ROLE_ID';"|sql_query)
+    unset CHECK_EXIST
+    for CHECK_DEP in $DEP_FOR_HOST ; do [[ $NEW_DEP_ID == $CHECK_SERVICE ]] && CHECK_EXIST=YES; done
+    [[ $CHECK_EXIST == YES ]] && ERROR="$ERROR That dependancy does not exist in this role"
+    [[ -z $ERROR ]] && {
+      NEW_DEP_LIST="$DEP_FOR_HOST $NEW_DEP_ID"
+      echo "update role set DEPS='$NEW_DEP_LIST' where role_id='$ROLE_ID';" | sql_update
+      echo "$LOG_DATE $USERNAME MANUAL ADD_ROLE_DEP $ROLE $NEW_DEP_ID" >> $ACTIVITY_LOG
+    }
+  }
+  [[ -n "$NEW_HOST_TEMPLATE" ]] && {
+    [[ -z $(echo "select host_template_id from host_template where host_template_id='$NEW_HOST_TEMPLATE';" | sql_query) ]] && ERROR="$ERROR <br> That is not a valid host template"
+    [[ -z $ERROR ]] && {
+      echo "update role set host_template='$NEW_HOST_TEMPLATE' where role_id='$ROLE_ID';" | sql_update
+      echo "$LOG_DATE $USERNAME MANUAL ADD_ROLE_HOST_TEMPLATE $NEW_HOST_TEMPLATE" >> $ACTIVITY_LOG
+    }
+  }
+  DO=ROLE
+}
+
+###############################################
+## Show the role
+
+[[ $DO == ROLE ]] && {
+	#echo "==$QUERY_STRING==<br>"
+  # Get the host templates
+  while IFS="|" read NUM NAME _ ; do
+    HT_NAME[$NUM]="$NAME"
+  done< <(echo "select host_template_id,name from host_template;"|sql_query)
+
+  # Get the services
+  while IFS="|" read NUM NAME DESC USE CC _ ; do
+    SERVICE_NAME[$NUM]="$NAME"
+  done< <(echo "select service_id,name,description,use,check_command from services;"|sql_query)
+
+  while IFS="|" read NUM NAME  _ ; do
+    ESCALATION_NAME[$NUM]=$NAME
+  done< <(echo "select esc_id,name from escalations;"|sql_query)
+
+  while IFS="|" read NUM NAME  _ ; do
+    DEPENDANCY_NAME[$NUM]=$NAME
+  done< <(echo "select dep_id,name from deps;"|sql_query)
+
+  IFS="|" read NAME HT_ID HT_NAME SERVICES ESCALATIONS DEPS <<< "$(echo "select R.name,R.host_template,H.name,R.services,R.escalations,R.deps from role R,host_template H where R.role_id='$ROLE_ID' and R.host_template=H.host_template_id;"|sql_query)"
+
+		#$(for i in ${!SERVICE_NAME[*]} ; do echo "<option label=\"${SERVICE_NAME[$i]}\" value=\"$i\"></option>";done)
+	cat <<- EOF
+	  <p id=error>$ERROR</p>
+	  <form method=POST action=/cgi-bin/auth.cgi>
+	  <center><b>$NAME</b></center>
+	  <br>
+	  <b>Host Template:</b><select name=NEW_HOST_TEMPLATE>
+     <option value="$HT_ID">$HT_NAME</option>
+     $(while IFS="|" read HTP_ID HTP_NAME ; do echo "<option value=\"$HTP_ID\">$HTP_NAME</option>" ; done< <(echo "select host_template_id,name from host_template" |sql_query))
+     </select>
+	  <br><br><b>Services</b> - (The check box will remove a service)
+	  <dir>
+	    <table border=0 cellspacing=0 cellpadding=5>
+	    $(a=1
+	      for i in $SERVICES; do
+		[[ $a == 0 ]] && echo "<tr>"
+		echo "<td><input type=checkbox name=DELETE_SRV value=\"$i\" \\><a href=auth.cgi?SCR=service_edit&DO=SRV&SRV_ID=$i>${SERVICE_NAME[$i]}</a></td>"
+		[[ $a == 3 ]] && { echo "</tr>"; a=0; }
+		a=$(($a+1))
+	      done)
+	    </table><br>
+	    Add a new service: <input type=text name=NEW_SRV id=NEW_SRV list="UNUSED_SERVICES">
+	    <datalist id=UNUSED_SERVICES>
+	    $(for i in ${!SERVICE_NAME[*]} ; do echo "    <option label=\"${SERVICE_NAME[$i]}\">${SERVICE_NAME[$i]}</option>";done)
+	    </datalist>
+	  </dir>
+	
+    	  <br><b>Escalations </b>
+	  <dir>
+	    $(for i in $ESCALATIONS; do echo "    <input type=checkbox name=DELETE_ESC value=\"$i\" \\>${ESCALATION_NAME[$i]}<br>" ;done)
+	    <b>Add a new Escalation:</b> <input type=text name=NEW_ESC id=NEW_ESC list="UNUSED_ESC">
+	    <datalist id=UNUSED_ESC>
+	    $(for i in ${!ESCALATION_NAME[*]} ; do echo "    <option label=\"${ESCALATION_NAME[$i]}\">${ESCALATION_NAME[$i]}</option>";done)
+	    </datalist>
+	  </dir>
+
+	  <br><b>Dependencies </b>
+	  <dir>
+	    $(for i in $DEPS; do echo "    <input type=checkbox name=DELETE_DEP value=\"$i\" \\>${DEPENDANCY_NAME[$i]}<br>" ;done)
+	    <b>Add a new Dependancy:</b> <input type=text name=NEW_DEP id=NEW_DEP list="UNUSED_DEP">
+	    <datalist id=UNUSED_DEP>
+	    $(for i in ${!DEPENDANCY_NAME[*]} ; do echo "    <option label=\"${DEPENDANCY_NAME[$i]}\">${DEPENDANCY_NAME[$i]}</option>";done)
+	    </datalist>
+	  </dir>
+
+	  <br>
+	  <input type=hidden name=SCR value=$SCR>
+	  <input type=hidden name=DO value=UPDATE>
+	  <input type=hidden name=ROLE_ID value=$ROLE_ID>
+	  <input type=submit value="Update This Role">
+	  </form><br>
+	<center><b>Role Information</b></center>
+	servers in this role:
+	<table border=0 cellspacing=0 cellpadding=5 align=center>
+	$(a=1
+	while IFS="|" read SYSTEM SYSTEM_ID STATUS _ ; do
+	  [[ $a == 0 ]] && echo "<tr>"
+	  echo "<td align=center><a href=\"/cgi-bin/auth.cgi/?SCR=host_edit&DO=SERVER&SERVER=$SYSTEM_ID\">$SYSTEM</a>-$STATUS</td>"
+	  [[ $a == 4 ]] && { echo "</tr>"; a=0; }
+	  a=$(($a+1))
+	done< <(echo "select hostname,server_id,status from servers where role='$ROLE_ID';" |sql_query) )
+	</table><br>
+	EOF
+}

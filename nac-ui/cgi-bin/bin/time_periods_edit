@@ -1,0 +1,426 @@
+#!/bin/bash
+
+# set some variables
+. $(cat varset)
+
+use_admin_functions
+use_base_functions
+use_bust_functions
+use_date_functions
+use_check_functions
+use_form_functions
+
+#echo $QUERY_STRING
+nno=0
+for X in  ${QUERY_STRING//&/ }; do
+  case $X in
+    SCR=*) SCR=${X#*=};;
+    DO=*) DO=${X#*=};;
+    TIME_PERIODS_ID=*) TIME_PERIODS_ID=${X#*=};;
+
+    DEL_NAME=*) NEW_NAME=$(bustit ${X#*=});;
+
+    NEW_NAME=*) NEW_NAME=$(bustit ${X#*=});;
+    NEW_BUILD_NAME=*) NEW_BUILD_NAME=$(bustit ${X#*=});;
+    NEW_ALIAS=*) NEW_ALIAS=$(bustit ${X#*=});;
+    NEW_USE=*) NEW_USE=$(bustit ${X#*=});;
+    NEW_SU_ST_HR_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_SU_ST_HR[ID]=${X#*=};;
+    NEW_SU_ST_MN_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_SU_ST_MN[ID]=${X#*=};;
+    NEW_SU_EN_HR_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_SU_EN_HR[ID]=${X#*=};;
+    NEW_SU_EN_MN_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_SU_EN_MN[ID]=${X#*=};;
+    NEW_MO_ST_HR_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_MO_ST_HR[ID]=${X#*=};;
+    NEW_MO_ST_MN_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_MO_ST_MN[ID]=${X#*=};;
+    NEW_MO_EN_HR_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_MO_EN_HR[ID]=${X#*=};;
+    NEW_MO_EN_MN_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_MO_EN_MN[ID]=${X#*=};;
+    NEW_TU_ST_HR_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_TU_ST_HR[ID]=${X#*=};;
+    NEW_TU_ST_MN_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_TU_ST_MN[ID]=${X#*=};;
+    NEW_TU_EN_HR_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_TU_EN_HR[ID]=${X#*=};;
+    NEW_TU_EN_MN_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_TU_EN_MN[ID]=${X#*=};;
+    NEW_WE_ST_HR_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_WE_ST_HR[ID]=${X#*=};;
+    NEW_WE_ST_MN_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_WE_ST_MN[ID]=${X#*=};;
+    NEW_WE_EN_HR_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_WE_EN_HR[ID]=${X#*=};;
+    NEW_WE_EN_MN_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_WE_EN_MN[ID]=${X#*=};;
+    NEW_TH_ST_HR_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_TH_ST_HR[ID]=${X#*=};;
+    NEW_TH_ST_MN_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_TH_ST_MN[ID]=${X#*=};;
+    NEW_TH_EN_HR_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_TH_EN_HR[ID]=${X#*=};;
+    NEW_TH_EN_MN_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_TH_EN_MN[ID]=${X#*=};;
+    NEW_FR_ST_HR_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_FR_ST_HR[ID]=${X#*=};;
+    NEW_FR_ST_MN_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_FR_ST_MN[ID]=${X#*=};;
+    NEW_FR_EN_HR_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_FR_EN_HR[ID]=${X#*=};;
+    NEW_FR_EN_MN_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_FR_EN_MN[ID]=${X#*=};;
+    NEW_SA_ST_HR_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_SA_ST_HR[ID]=${X#*=};;
+    NEW_SA_ST_MN_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_SA_ST_MN[ID]=${X#*=};;
+    NEW_SA_EN_HR_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_SA_EN_HR[ID]=${X#*=};;
+    NEW_SA_EN_MN_[0-9]=*) Y=${X%=*} ; ID=${Y##*_} ; NEW_SA_EN_MN[ID]=${X#*=};;
+    NEW_TP_OTHER=*) NEW_TP_OTHER=$(bustit ${X#*=});;
+    ADD_OPTION=*) ADD_OPTION=${X#*=};;
+    RM_OPTION=*) RM_OPTION=${X#*=};;
+    ADD_SU=*) NEW_SU_ST_HR[10]=00; NEW_SU_ST_MN[10]=00; NEW_SU_EN_HR[10]=23; NEW_SU_EN_MN[10]=59 ;;
+    ADD_MO=*) NEW_MO_ST_HR[10]=00; NEW_MO_ST_MN[10]=00; NEW_MO_EN_HR[10]=23; NEW_MO_EN_MN[10]=59 ;;
+    ADD_TU=*) NEW_TU_ST_HR[10]=00; NEW_TU_ST_MN[10]=00; NEW_TU_EN_HR[10]=23; NEW_TU_EN_MN[10]=59 ;;
+    ADD_WE=*) NEW_WE_ST_HR[10]=00; NEW_WE_ST_MN[10]=00; NEW_WE_EN_HR[10]=23; NEW_WE_EN_MN[10]=59 ;;
+    ADD_TH=*) NEW_TH_ST_HR[10]=00; NEW_TH_ST_MN[10]=00; NEW_TH_EN_HR[10]=23; NEW_TH_EN_MN[10]=59 ;;
+    ADD_FR=*) NEW_FR_ST_HR[10]=00; NEW_FR_ST_MN[10]=00; NEW_FR_EN_HR[10]=23; NEW_FR_EN_MN[10]=59 ;;
+    ADD_SA=*) NEW_SA_ST_HR[10]=00; NEW_SA_ST_MN[10]=00; NEW_SA_EN_HR[10]=23; NEW_SA_EN_MN[10]=59 ;;
+    ADD_PERIOD=*) [[ -z $ADD_PERIOD ]] && ADD_PERIOD="${X#*=}" || ADD_PERIOD="$ADD_PERIOD ${X#*=}" ;;
+  esac
+done
+
+
+[[ $DO == NEW ]] && {
+  [[ ${#NEW_NAME} -gt 64 ]] && ERROR="$ERROR<br>That name is too long. Please pick something shorter"
+  [[ ${#NEW_NAME} -lt 4 ]] && ERROR="$ERROR<br>That name is too short. Please pick something longer"
+  [[ ! -z "$(echo "${NEW_NAME}" | tr -d "[A-Za-z0-9_.\-]")" ]] && ERROR="$ERROR <br> Invalid charcters in the name"
+  REPEAT=$(echo "select name from time_periods where name='$NEW_NAME' OR build_name='$NEW_NAME';" |sql_query)
+  [[ ! -z $REPEAT ]] && ERROR="${ERROR} <br> That name already exists Please choose another"
+  [[ -z $ERROR ]] && {
+    echo "insert into time_periods (name,build_name) values ('$NEW_NAME','$NEW_NAME');"|sql_update
+    TIME_PERIODS_ID=$(echo "select time_periods_id from time_periods where name='$NEW_NAME';" |sql_query)
+    DO=TIME_PERIODS
+  } || {
+    echo "<p id=error>$ERROR</p>"
+    DO=SHOW
+  }
+}
+[[ $DO == DELETE ]] && {
+  REPEAT=$(echo "select name from time_periods where time_periods_id='$TIME_PERIODS_ID';" |sql_query)
+  [[ -z $REPEAT ]] && ERROR="$ERROR <br> That template does not exist"
+  #### <<--  check to see if this service is beign used anywhere
+  [[ -z $ERROR ]] && {
+    ERROR="The delete function is not ready yet"
+    #echo "delete from time_periods where time_periods_id='$TIME_PERIODS_ID'"|sql_update
+    DO=SHOW
+  } || {
+    echo "<p id=error>$ERROR</p>"
+    DO=HOST_TMP
+  }
+}
+
+[[ -z $DO || $DO == SHOW ]] && {
+cat <<- EOF
+  <center><b>Time Periods</center></b><br>
+  <form method=POST action=/cgi-bin/auth.cgi>
+    <center>New Time Period name: <input type=text name="NEW_NAME" size="30">
+    <input type=hidden name=SCR value=$SCR>
+    <input type=hidden name=DO value=NEW>
+    <input type=submit value="Add It">
+  </form></center><br>
+  <table border=1 cellspacing=0 cellpadding=5 align=center>
+EOF
+
+  i=1
+  while IFS="|" read TIME_PERIODS_ID NAME _ ; do 
+    [[ $i == 0 ]] && echo "<tr>"
+    echo "<td><a href=\"/cgi-bin/auth.cgi?SCR=$SCR&DO=TIME_PERIODS&TIME_PERIODS_ID=$TIME_PERIODS_ID\">$NAME</a></td>"
+    [[ $i == 4 ]] && { echo "</tr>"; i=0; }
+    i=$(($i+1))
+  done< <(echo "select time_periods_id,name from time_periods order by name" | sql_query)
+  echo "</table>"
+  exit 0
+}
+
+################################################################################################################
+## Make an update if nessessary
+
+[[ $DO == UPDATE ]] && {
+  ## do your checks
+  EXISTS=$(echo "select time_periods_id from time_periods where time_periods_id='$TIME_PERIODS_ID';" |sql_query)
+  [[ -z $EXISTS ]] && {
+  ERROR="$ERROR <br> That Time Period does not exist"
+  } || {
+  ##### The following needs to be fixed. Check NEW SEVICE NAME for exploits and use a different bustit (sql)
+  [[ -n $ADD_OPTION ]] && {
+    case $ADD_OPTION in
+      alias) echo "update time_periods set alias='_' where time_periods_id='$TIME_PERIODS_ID';" | sql_update ;;
+      #use) echo "update time_periods set use='_' where time_periods_id='$TIME_PERIODS_ID';" | sql_update ;;
+      monday) echo "update time_periods set monday='00:00-24:00' where time_periods_id='$TIME_PERIODS_ID';" | sql_update ;;
+      tuesday) echo "update time_periods set tuesday='00:00-24:00' where time_periods_id='$TIME_PERIODS_ID';" | sql_update ;;
+      wednesday) echo "update time_periods set wednesday='00:00-24:00' where time_periods_id='$TIME_PERIODS_ID';" | sql_update ;;
+      thursday) echo "update time_periods set thursday='00:00-24:00' where time_periods_id='$TIME_PERIODS_ID';" | sql_update ;;
+      friday) echo "update time_periods set friday='00:00-24:00' where time_periods_id='$TIME_PERIODS_ID';" | sql_update ;;
+      saturday) echo "update time_periods set saturday='00:00-24:00' where time_periods_id='$TIME_PERIODS_ID';" | sql_update ;;
+      sunday) echo "update time_periods set sunday='00:00-24:00' where time_periods_id='$TIME_PERIODS_ID';" | sql_update ;;
+      #tp_other) echo "update time_periods set tp_other='_' where time_periods_id='$TIME_PERIODS_ID';" | sql_update ;;
+    esac
+  }
+
+  [[ -n $RM_OPTION ]] && {
+    case $RM_OPTION in
+      alias) UPDATE="$UPDATE|alias=NULL"; unset NEW_ALIAS ;;
+      #use) echo "update time_periods set use=NULL where time_periods_id='$TIME_PERIODS_ID';" | sql_update ;;
+      monday) UPDATE="$UPDATE|monday=NULL"; unset NEW_MO_ST_HR ;;
+      tuesday) UPDATE="$UPDATE|tuesday=NULL"; unset NEW_TU_ST_HR ;;
+      wednesday) UPDATE="$UPDATE|wednesday=NULL"; unset NEW_WE_ST_HR ;;
+      thursday) UPDATE="$UPDATE|thursday=NULL"; unset NEW_TH_ST_HR ;;
+      friday) UPDATE="$UPDATE|friday=NULL"; unset NEW_FR_ST_HR ;;
+      saturday) UPDATE="$UPDATE|saturday=NULL"; unset NEW_SA_ST_HR ;;
+      sunday) UPDATE="$UPDATE|sunday=NULL"; unset NEW_SU_ST_HR ;;
+      #tp_other) UPDATE="$UPDATE|tp_other=NULL"; unset NEW_TP_OTHER ;;
+    esac
+  }
+
+  check_time_period_time() {
+    unset FAIL
+    ST_HR=$1;ST_MN=$2;EN_HR=$3;EN_MN=$4
+    [[ ! -z $(echo $ST_HR | tr -d [0-9]) ]] && FAIL="${FAIL}Start Hour," || {
+      [[ ${ST_HR#0} -gt 24 ]] && FAIL="${FAIL}Start Hour,"
+    }
+    [[ ! -z $(echo $ST_HR | tr -d [0-9]) ]] && FAIL="${FAIL}Start Minute," || {
+      [[ ${ST_MN#0} -gt 59 ]] && FAIL="${FAIL}Start Minute,"
+    }
+    [[ ! -z $(echo $ST_HR | tr -d [0-9]) ]] && FAIL="${FAIL}End Hour," || {
+      [[ ${EN_HR#0} -gt 24 ]] && FAIL="${FAIL}End Hour,"
+    }
+    [[ ! -z $(echo $ST_HR | tr -d [0-9]) ]] && FAIL="${FAIL}End Minute," || {
+      [[ ${EN_MN#0} -gt 59 ]] && FAIL="${FAIL}End Minute,"
+    }
+    [[ -z $FAIL ]] && {
+      echo "$ST_HR:$ST_MN-$EN_HR:$EN_MN"
+      exit 0
+    } || {
+      echo $FAIL
+      exit 1
+    }
+  }
+  
+  [[ -z $NEW_NAME ]] && ERROR="$ERROR <br> The time period name is required"
+  [[ -z $NEW_BUILD_NAME ]] && ERROR="$ERROR <br> The time period nagios name is required"
+  [[ ${#NEW_NAME} -gt 127 ]] && ERROR="$ERROR<br>Your time period name is too long. Please pick something shorter"
+  [[ ${#NEW_BUILD_NAME} -gt 127 ]] && ERROR="$ERROR<br>Your time period nagios name is too long. Please pick something shorter"
+  [[ ${#NEW_USE} -gt 127 ]] && ERROR="$ERROR<br>Your time period use field is too long. Please pick something shorter"
+  [[ ! -z "$(echo "${NEW_NAME}" | tr -d "[ A-Za-z0-9+_.\-]")" ]] && ERROR="$ERROR <br> Invalid charcters in your time period name"
+  [[ ! -z "$(echo "${NEW_BUILD_NAME}" | tr -d "[ A-Za-z0-9+_.\-]")" ]] && ERROR="$ERROR <br> Invalid charcters in your time period nagios name"
+  [[ ! -z "$(echo "${NEW_USE}" | tr -d "[A-Za-z0-9+_.,\-]")" ]] && ERROR="$ERROR <br> Invalid charcters in your time period use"
+  
+  #[[ -z $ERROR ]] && UPDATE="name='$NEW_NAME' build_name='$NEW_BUILD_NAME' alias='$NEW_ALIAS' use='$NEW_USE'" 
+  [[ -z $ERROR ]] && UPDATE="$UPDATE|name='$NEW_NAME'|build_name='$NEW_BUILD_NAME'" 
+
+  [[ -n $NEW_ALIAS ]] && {
+    [[ ${#NEW_ALIAS} -gt 127 ]] && ERROR="$ERROR<br>Your time period alias is too long. Please pick something shorter"
+    [[ ! -z "$(echo "${NEW_ALIAS}" | tr -d "[ A-Za-z0-9+,_.\-]")" ]] && ERROR="$ERROR <br> Invalid charcters in your time period alias"
+    [[ -z $ERROR ]] && {
+      UPDATE="$UPDATE|alias='$NEW_ALIAS'"
+    }
+  }
+  for TIME_ID in ${!NEW_SU_ST_HR[@]} ; do
+    TIME_RESULT=$(check_time_period_time ${NEW_SU_ST_HR[TIME_ID]} ${NEW_SU_ST_MN[TIME_ID]} ${NEW_SU_EN_HR[TIME_ID]} ${NEW_SU_EN_MN[TIME_ID]})
+    [[ $? != 0 ]] && ERROR="$ERROR<br>Error with Sunday $TIME_RESULT"
+    [[ -z $TIME_RESULT ]] && ERROR="$ERROR<br>Error with Sunday's time"
+    [[ -z $ERROR ]] && {
+      [[ -z $UPDATE_SU ]] && UPDATE_SU="$TIME_RESULT" || UPDATE_SU="$UPDATE_SU,$TIME_RESULT"
+    }
+  done
+  [[ -n $UPDATE_SU ]] && UPDATE="$UPDATE|sunday='$UPDATE_SU'"
+
+  for TIME_ID in ${!NEW_MO_ST_HR[@]} ; do
+    TIME_RESULT=$(check_time_period_time ${NEW_MO_ST_HR[TIME_ID]} ${NEW_MO_ST_MN[TIME_ID]} ${NEW_MO_EN_HR[TIME_ID]} ${NEW_MO_EN_MN[TIME_ID]})
+    [[ $? != 0 ]] && ERROR="$ERROR<br>Error with Monday $TIME_RESULT"
+    [[ -z $TIME_RESULT ]] && ERROR="$ERROR<br>Error with Monday's time"
+    [[ -z $ERROR ]] && {
+      [[ -z $UPDATE_MO ]] && UPDATE_MO="$TIME_RESULT" || UPDATE_MO="$UPDATE_MO,$TIME_RESULT"
+    }
+  done
+  [[ -n $UPDATE_MO ]] && UPDATE="$UPDATE|monday='$UPDATE_MO'"
+
+  for TIME_ID in ${!NEW_TU_ST_HR[@]} ; do
+    TIME_RESULT=$(check_time_period_time ${NEW_TU_ST_HR[TIME_ID]} ${NEW_TU_ST_MN[TIME_ID]} ${NEW_TU_EN_HR[TIME_ID]} ${NEW_TU_EN_MN[TIME_ID]})
+    [[ $? != 0 ]] && ERROR="$ERROR<br>Error with Tuesday $TIME_RESULT"
+    [[ -z $TIME_RESULT ]] && ERROR="$ERROR<br>Error with Tuesday's time"
+    [[ -z $ERROR ]] && {
+      [[ -z $UPDATE_TU ]] && UPDATE_TU="$TIME_RESULT" || UPDATE_TU="$UPDATE_TU,$TIME_RESULT"
+    }
+  done
+  [[ -n $UPDATE_TU ]] && UPDATE="$UPDATE|tuesday='$UPDATE_TU'"
+
+  for TIME_ID in ${!NEW_WE_ST_HR[@]} ; do
+    TIME_RESULT=$(check_time_period_time ${NEW_WE_ST_HR[TIME_ID]} ${NEW_WE_ST_MN[TIME_ID]} ${NEW_WE_EN_HR[TIME_ID]} ${NEW_WE_EN_MN[TIME_ID]})
+    [[ $? != 0 ]] && ERROR="$ERROR<br>Error with Wednesday $TIME_RESULT"
+    [[ -z $TIME_RESULT ]] && ERROR="$ERROR<br>Error with Wednesday's time"
+    [[ -z $ERROR ]] && {
+      [[ -z $UPDATE_WE ]] && UPDATE_WE="$TIME_RESULT" || UPDATE_WE="$UPDATE_WE,$TIME_RESULT"
+    }
+  done
+  [[ -n $UPDATE_WE ]] && UPDATE="$UPDATE|wednesday='$UPDATE_WE'"
+
+  for TIME_ID in ${!NEW_TH_ST_HR[@]} ; do
+    TIME_RESULT=$(check_time_period_time ${NEW_TH_ST_HR[TIME_ID]} ${NEW_TH_ST_MN[TIME_ID]} ${NEW_TH_EN_HR[TIME_ID]} ${NEW_TH_EN_MN[TIME_ID]})
+    [[ $? != 0 ]] && ERROR="$ERROR<br>Error with Thursday $TIME_RESULT"
+    [[ -z $TIME_RESULT ]] && ERROR="$ERROR<br>Error with Thursday's time"
+    [[ -z $ERROR ]] && {
+      [[ -z $UPDATE_TH ]] && UPDATE_TH="$TIME_RESULT" || UPDATE_TH="$UPDATE_TH,$TIME_RESULT"
+    }
+  done
+  [[ -n $UPDATE_TH ]] && UPDATE="$UPDATE|thursday='$UPDATE_TH'"
+
+  for TIME_ID in ${!NEW_FR_ST_HR[@]} ; do
+    TIME_RESULT=$(check_time_period_time ${NEW_FR_ST_HR[TIME_ID]} ${NEW_FR_ST_MN[TIME_ID]} ${NEW_FR_EN_HR[TIME_ID]} ${NEW_FR_EN_MN[TIME_ID]})
+    [[ $? != 0 ]] && ERROR="$ERROR<br>Error with Friday $TIME_RESULT"
+    [[ -z $TIME_RESULT ]] && ERROR="$ERROR<br>Error with Friday's time"
+    [[ -z $ERROR ]] && {
+      [[ -z $UPDATE_FR ]] && UPDATE_FR="$TIME_RESULT" || UPDATE_FR="$UPDATE_FR,$TIME_RESULT"
+    }
+  done
+  [[ -n $UPDATE_FR ]] && UPDATE="$UPDATE|friday='$UPDATE_FR'"
+
+  for TIME_ID in ${!NEW_SA_ST_HR[@]} ; do
+    TIME_RESULT=$(check_time_period_time ${NEW_SA_ST_HR[TIME_ID]} ${NEW_SA_ST_MN[TIME_ID]} ${NEW_SA_EN_HR[TIME_ID]} ${NEW_SA_EN_MN[TIME_ID]})
+    [[ $? != 0 ]] && ERROR="$ERROR<br>Error with Saturday $TIME_RESULT"
+    [[ -z $TIME_RESULT ]] && ERROR="$ERROR<br>Error with Saturday's time"
+    [[ -z $ERROR ]] && {
+      [[ -z $UPDATE_SA ]] && UPDATE_SA="$TIME_RESULT" || UPDATE_SA="$UPDATE_SA,$TIME_RESULT"
+    }
+  done
+  [[ -n $UPDATE_SA ]] && UPDATE="$UPDATE|saturday='$UPDATE_SA'"
+
+
+  [[ -z $ERROR ]] && {
+    UPDATE_SQL=$(echo $UPDATE | sed 's/^|*//;s/|*$//;s/|/,/g')
+    echo "update time_periods set $UPDATE_SQL where time_periods_id='$TIME_PERIODS_ID';" | sql_update
+  #  echo "update time_periods set $UPDATE_SQL where time_periods_id='$TIME_PERIODS_ID';"
+  }
+#    ########### <<-- Write everything to autit lots, error logs and complaint logs
+
+  }
+  DO=TIME_PERIODS
+}
+
+
+#######################################################################################################################
+## This is the function which prints the time period in html format.
+## 
+
+[[ $DO == TIME_PERIODS ]] && {
+  show_time_period() {
+   SHOW_DAY=$1
+   X=0
+   while read ONE_TIME; do
+    IFS="|" read CURR_ST_HR CURR_ST_MN CURR_EN_HR CURR_EN_MN _ <<< "$(echo $ONE_TIME | tr ':-' '||')"
+    [[ $X -ge 1 ]] && echo "&nbsp &nbsp,&nbsp &nbsp"
+    echo "<select name=\"NEW_${SHOW_DAY}_ST_HR_$X\">"
+     echo "<option>$CURR_ST_HR</option>"
+     for HR in 0{0..9} {10..24} ; do printf "<option>$HR</option>"; done ; echo
+    echo "</select>:<select name=\"NEW_${SHOW_DAY}_ST_MN_$X\">"
+     echo "<option>$CURR_ST_MN</option>"
+     for HR in 0{0..9} {10..59} ; do printf "<option>$HR</option>"; done ; echo
+    echo "</select>-<select name=\"NEW_${SHOW_DAY}_EN_HR_$X\">"
+     echo "<option>$CURR_EN_HR</option>"
+     for HR in 0{0..9} {10..24} ; do printf "<option>$HR</option>"; done ; echo
+    echo "</select>:<select name=\"NEW_${SHOW_DAY}_EN_MN_$X\">"
+    echo "<option>$CURR_EN_MN</option>"
+     for HR in 0{0..9} {10..59} ; do printf "<option>$HR</option>"; done ; echo
+    echo "</select>"
+   X=$(($X+1))
+   done< <(echo $2 | tr ',' '\n' )
+   echo "<br>&nbsp &nbsp&nbsp &nbsp&nbsp &nbsp<input type="checkbox" name="ADD_${SHOW_DAY}" value="1">Add a time period<br>"
+  }
+
+  IFS="|" read NAME BUILD_NAME ALIAS USE SUNDAY MONDAY TUESDAY WEDNESDAY THURSDAY FRIDAY SATURDAY TP_OTHER _ <<< "$(echo "select name,build_name,alias,use,sunday,monday,tuesday,wednesday,thursday,friday,saturday,tp_other from time_periods where time_periods_id='$TIME_PERIODS_ID';" | sql_query)"
+	cat <<- EOF
+	  <p id=error>$ERROR</p>
+	  <form method=POST action=/cgi-bin/auth.cgi>
+	  <center><b>$BUILD_NAME</b></center>
+	  <br>
+	  Name: <input type=text name="NEW_NAME" value="$NAME" size="100"><br>
+	  Nagios Name: <input type=text name="NEW_BUILD_NAME" value="$BUILD_NAME" size="100"><br>
+	EOF
+
+
+	  [[ -n $ALIAS ]] && {
+	    echo "<br>Alias: <input type=text name=\"NEW_ALIAS\" value=\"$ALIAS\" size=\"100\"><br>"
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|alias"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|alias"
+	  }
+	  [[ -n $USE ]] && {
+	    ######## USE IS NOT WORKING YET!!!
+	    echo "<br>Use: <input type=text name=\"NEW_USE\" value=\"$USE\" >"
+	    #### <<- Add index of all possible time periods to use
+	  #  RM_OPTIONS_LIST="$RM_OPTIONS_LIST|use"
+	  #} || {
+	  #  ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|use"
+	  }
+	  [[ -n $SUNDAY ]] && {
+	    echo "<br>Sunday: "
+	    show_time_period SU $SUNDAY
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|sunday"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|sunday"
+	  }
+	  [[ -n $MONDAY ]] && {
+	    echo "<br>Monday: "
+	    show_time_period MO $MONDAY
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|monday"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|monday"
+	  }
+	  [[ -n $TUESDAY ]] && {
+	    echo "<br>Tuesday: "
+	    show_time_period TU $TUESDAY
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|tuesday"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|tuesday"
+	  }
+	  [[ -n $WEDNESDAY ]] && {
+	    echo "<br>Wednesday: "
+	    show_time_period WE $WEDNESDAY
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|wednesday"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|wednesday"
+	  }
+	  [[ -n $THURSDAY ]] && {
+	    echo "<br>Thursday: "
+	    show_time_period TH $THURSDAY
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|thursday"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|thursday"
+	  }
+	  [[ -n $FRIDAY ]] && {
+	    echo "<br>Friday: "
+	    show_time_period FR $FRIDAY
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|friday"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|friday"
+	  }
+	  [[ -n $SATURDAY ]] && {
+	    echo "<br>Saturday: "
+	    show_time_period SA $SATURDAY
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|saturday"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|saturday"
+	  }
+
+	echo "<br><br>"
+	add_remove_options
+
+	cat <<- EOF
+	  <br><br>
+	  <input type=hidden name=SCR value=$SCR>
+	  <input type=hidden name=DO value=UPDATE>
+	  <input type=hidden name=TIME_PERIODS_ID value=$TIME_PERIODS_ID>
+	  <input type=submit value="Update This Time Period">
+	  </form><br>
+	  <form method=POST action=/cgi-bin/auth.cgi>
+	  <input type=hidden name=SCR value=$SCR>
+	  <input type=hidden name=DO value=DELETE>
+	  <input type=hidden name=TIME_PERIODS_ID value=$TIME_PERIODS_ID>
+	  <input type=submit value="Delete This Time Period">
+	  </form><br>
+
+	<h3>This Time period is the check period for these host templates </h3>
+	$(while IFS="|" read ID NAME _ ; do 
+		echo "&nbsp &nbsp<a href=\"/cgi-bin/auth.cgi?SCR=host_temp_edit&DO=HOST_TMP&HOST_TMP_ID=$ID\">$NAME</a>&nbsp &nbsp"
+	done< <(echo "select host_template_id,name from host_template where check_period='$TIME_PERIODS_ID';" |sql_query) )
+	<h3>This Time period is the check period for these service templates </h3>
+	$(while IFS="|" read ID NAME _ ; do 
+		echo "&nbsp &nbsp<a href=\"/cgi-bin/auth.cgi?SCR=service_temp_edit&DO=SRV_TMP&SRV_TMP_ID=$ID\">$NAME</a>&nbsp &nbsp"
+	done< <(echo "select service_template_id,name from service_template where check_period='$TIME_PERIODS_ID';" |sql_query) )
+	<h3>This Time period is the notification period for these host templates </h3>
+	$(while IFS="|" read ID NAME _ ; do 
+		echo "&nbsp &nbsp<a href=\"/cgi-bin/auth.cgi?SCR=host_temp_edit&DO=HOST_TMP&HOST_TMP_ID=$ID\">$NAME</a>&nbsp &nbsp"
+	done< <(echo "select host_template_id,name from host_template where notification_period='$TIME_PERIODS_ID';" |sql_query) )
+	<h3>This Time period is the notification period for these service templates </h3>
+	$(while IFS="|" read ID NAME _ ; do 
+		echo "&nbsp &nbsp<a href=\"/cgi-bin/auth.cgi?SCR=service_temp_edit&DO=SRV_TMP&SRV_TMP_ID=$ID\">$NAME</a>&nbsp &nbsp"
+	done< <(echo "select service_template_id,name from service_template where notification_period='$TIME_PERIODS_ID';" |sql_query) )
+	EOF
+}

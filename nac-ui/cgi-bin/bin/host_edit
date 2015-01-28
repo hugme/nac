@@ -1,0 +1,408 @@
+#!/bin/bash
+
+# set some variables
+. $(cat varset)
+
+use_date_functions
+use_admin_functions
+use_base_functions
+use_bust_functions
+
+#echo $QUERY_STRING
+for X in  ${QUERY_STRING//&/ }; do
+        case $X in
+                SCR=*) SCR=${X#*=};;
+                DO=*) DO=${X#*=};;
+                SEARCH=*) SEARCH=${X#*=};;
+                SEARCH_HOST=*) SEARCH_HOST=${X#*=};;
+                SEARCH_ADDRESS=*) SEARCH_ADDRESS=${X#*=};;
+                SEARCH_LOC=*) SEARCH_LOC=${X#*=};;
+                SEARCH_ROLE=*) SEARCH_ROLE=${X#*=};;
+                SERVER=*) SERVER=${X#*=};;
+                NEW_HOST_NAME=*) NEW_HOST_NAME=${X#*=};;
+                NEW_ROLE=*) NEW_ROLE=${X#*=};;
+                NEW_ALIAS=*) NEW_ALIAS=$(bustit ${X#*=});;
+                NEW_FILE=*) NEW_FILE=$(bustit ${X#*=});;
+                NEW_STATUS=*) NEW_STATUS=${X#*=};;
+                NEW_NAG_ADD=*) NEW_NAG_ADD=$(bustit ${X#*=});;
+                NEW_LOCATION=*) NEW_LOCATION=$(bustit ${X#*=});;
+                NEW_NAG_LOCATION=*) NEW_NAG_LOCATION=$(bustit ${X#*=});;
+        esac
+done
+
+
+###################################################################################
+#### Always print the top menu search criteria
+###################################################################################
+
+cat << EOF
+<center>
+Enter your Search criteria:<br><br>
+<form method=POST action=/cgi-bin/auth.cgi>
+<table width=500 border=0>
+        <tr><td>Hostname:</td><td><input type=text name=SEARCH_HOST></td></tr>
+        <tr><td>Address:</td><td><input type=text name=SEARCH_ADDRESS></td></tr>
+        <tr><td>Location:</td><td><input type=text name=SEARCH_LOC></td></tr>
+        <tr><td>Role:</td><td><input type=text name=SEARCH_ROLE></td></tr>
+        <tr><td align=center colspan=2>
+        <input type=hidden name=SCR value=$SCR>
+        <input type=hidden name=DO value=SEARCH>
+        <input type=hidden name=SEARCH value=SEARCH>
+        <input type=submit value="Search!">
+        </form>
+	<form method=POST action=/cgi-bin/auth.cgi>
+        <input type=hidden name=SCR value=$SCR>
+        <input type=hidden name=DO value=ADD_REQUEST>
+        <input type=submit value="Add a new Host">
+        </form>
+        </td><tr>
+</table>
+<center>
+EOF
+
+###################################################################################
+#### If they are searching, then search and display matching servers
+###################################################################################
+
+[[ $SEARCH == SEARCH ]] && {
+  unset SEARCH_CRIT CONJ
+  [[ -z "$BARCODE" ]] && { CONJ="where "
+    [ -z "$SEARCH_HOST" ] || { SEARCH_CRIT="$SEARCH_CRIT $CONJ hostname like '%$SEARCH_HOST%' " ; CONJ=and ; }
+    [ -z "$SEARCH_ADDRESS" ] || { SEARCH_CRIT="$SEARCH_CRIT $CONJ address like '%$SEARCH_ADDRESS%' " ; CONJ=and ; }
+    [ -z "$SEARCH_LOC" ] || { SEARCH_CRIT="$SEARCH_CRIT $CONJ location like '%$SEARCH_LOC%' " ; CONJ=and ; }
+    [ -z "$SEARCH_ROLE" ] || { SEARCH_CRIT="$SEARCH_CRIT $CONJ role like '%$SEARCH_ROLE%' " ; CONJ=and ; }
+  SEARCH_CRIT="$SEARCH_CRIT $CONJ S.role=R.role_id"
+  }
+
+  ## temp until database is here
+  i=0
+  SEARCH_STRING="select S.server_id,S.hostname,S.mco,R.name,S.status from servers S,role R ${SEARCH_CRIT}"
+
+cat <<- EOF
+  <br>
+  <table border=0 cellpadding=2 cellspacing=0>
+  <tr>
+    <th align=center>tag</th>
+    <th align=center>Hostname</th>
+    <th align=center>MCollective</th>
+    <th align=center>Role</th>
+    <th align=center>State</th>
+  </tr>
+  <tr><td colspan=5 align=center>
+  <form method=POST action=/cgi-bin/auth.cgi>
+  <input type=submit value="Select">
+  </td></tr>
+EOF
+
+  while IFS="|" read ID HOST_NAME MCO ROLE STATE _ ; do
+    [[ $SHEET_SIGNED != YES ]] && echo "<tr>" || echo "<tr bgcolor=\"#888888\">"
+    echo "<td><input type=checkbox value=\"$ID\"</td>"
+    echo "<td><a href=\"/cgi-bin/auth.cgi/?SCR=$SCR&DO=SERVER&SERVER=$ID\">$HOST_NAME</a></td>"
+    echo "<td>$MCO</td><td>$ROLE</td><td>$STATE</td></tr>"
+    done< <(echo "$SEARCH_STRING" | sql_query)
+
+cat <<- EOF
+  <tr><td colspan=5 align=center>
+  <input type=hidden name=SCR value=$SCR>
+  <input type=hidden name=DO value=SERVER>
+  <input type=hidden name=SERVER value=$ID>
+  <input type=submit value="Select">
+  </form>
+  </td></tr>
+  </table>
+EOF
+}
+
+
+
+###################################################################################
+#### Check the variables and make sure they match up with what we expect
+###################################################################################
+
+[[ $DO == EDIT || $DO == ADD ]] && {
+  NEW_STATUS=$(echo $NEW_STATUS | tr [:lower:] [:upper:])
+
+  [[ -n $NEW_HOST_NAME ]] && {
+    [ "${#NEW_HOST_NAME}" -gt 128 ] && ERROR="$ERROR <br> The Name is too long. It must be shorter than 128 characters"
+    [ "${#NEW_HOST_NAME}" -lt 4 ] && ERROR="$ERROR <br> The Name is too short. It must be more than 4 characters"
+    [[ ! -z "$(echo "${NEW_HOST_NAME}" | tr -d "[A-Za-z0-9_.\-]")" ]] && ERROR="$ERROR <br> The Name contains invalid characters"
+  }
+
+  [[ -n $NEW_ALIAS ]] && {
+    [ "${#NEW_ALIAS}" -gt 128 ] && ERROR="$ERROR <br> The alias name is too long. It must be shorter than 128 characters"
+    [[ ! -z "$(echo "${NEW_ALIAS}" | tr -d "[ A-Za-z0-9_.\-]")" ]] && ERROR="$ERROR <br> The alias contains invalid characters"
+  }
+
+  [[ -n $NEW_FILE ]] && {
+    [ "${#NEW_FILE}" -gt 64 ] && ERROR="$ERROR <br> The file name is too long. It must be shorter than 128 characters"
+    [ "${#NEW_FILE}" -lt 3 ] && ERROR="$ERROR <br> The file name is too short. It must be longer than 3 characters"
+    [[ ! -z "$(echo "${NEW_FILE}" | tr -d "[A-Za-z0-9_.\-]")" ]] && ERROR="$ERROR <br> The file name contains invalid characters"
+    [[ "${NEW_FILE##*.}" == "cfg" ]] || ERROR="$ERROR <br> The file name must end in \".cfg\""
+  }
+
+  [[ -n $NEW_NAG_ADD ]] && {
+    [[ ! -z "$(echo "${NEW_NAG_ADD}" | tr -d "[A-Za-z0-9_.\-]")" ]] && ERROR="$ERROR <br> The nagios_address contains invalid characters"
+    [ "${#NEW_NAG_ADD}" -gt 128 ] && ERROR="$ERROR <br> The alias name is too long. It must be shorter than 128 characters"
+  }
+
+  [[ -n $NEW_STATUS ]] && {
+    [[ $NEW_STATUS == OK || $NEW_STATUS == QUIET || $NEW_STATUS == QUIESCE || $NEW_STATUS == OMIT || $NEW_STATUS == DEPRECATED ]] ||  ERROR="$ERROR <br> Your status was invalid" 
+  }
+
+  [[ -n $NEW_LOCATION ]] && {
+    [[ $NEW_LOCATION == savvis || $NEW_LOCATION == amz1 ||  $NEW_LOCATION == amz1oregon ]] || ERROR="$ERROR <br> Invalid Location" 
+  }
+
+  [[ -n $NEW_NAG_LOCATION ]] && {
+    [[ $NEW_NAG_LOCATION == savvis || $NEW_NAG_LOCATION == amz1 ||  $NEW_NAG_LOCATION == amz1oregon ]] || ERROR="$ERROR <br> Invalid Location" 
+  }
+}
+
+###################################################################################
+#### If they want to add a server, Add it here then display below
+###################################################################################
+
+[[ $DO == ADD ]] && {
+  [[ -z $NEW_HOST_NAME ]] && ERROR="$ERROR <br> A Host name is required"
+  [[ -z $NEW_NAG_ADD ]] && ERROR="$ERROR <br> A Nagios Address is required"
+  [[ -z $NEW_ROLE ]] && ERROR="$ERROR <br> A Role is required"
+  [[ -z $NEW_LOCATION ]] && ERROR="$ERROR <br> A Location is required"
+  [[ -z $NEW_STATUS ]] && STATUS="QUIET"
+  IFS="|" read DUP_HOST_NAME _ <<< "$(echo "select hostname from servers where hostname='$NEW_HOST_NAME' or nag_address='$NEW_NAG_ADD' ;"|sql_query)"
+  IFS="|" read DUP_DEP_HOST_NAME _ <<< "$(echo "select hostname from deprecated_servers where hostname='$NEW_HOST_NAME' or nag_address='$NEW_NAG_ADD' ;"|sql_query)"
+  [[ ! -z $DUP_HOST_NAME ]] && ERROR="$ERROR <br> It looks like this server already exists as $DUP_HOST_NAME"
+  [[ ! -z $DUP_DEP_HOST_NAME ]] && ERROR="$ERROR <br> This server exists as a Deprecated server. Please have it moved back into the live database"
+  
+  [[ -z $ERROR ]] && {
+    echo "insert into servers (hostname,alias,file,puppet,mco,status,nag_address,role,location,nag_location) values ('$NEW_HOST_NAME','$NEW_HOST_NAME','${NEW_HOST_NAME}.cfg','FALSE','FALSE','$NEW_STATUS','$NEW_NAG_ADD','$NEW_ROLE','$NEW_LOCATION','$NEW_LOCATION');" | sql_update
+    IFS="|" read SERVER _ <<< "$(echo "select server_id from servers where hostname='$NEW_HOST_NAME';" | sql_query)"
+    echo "insert into complaint_log (create_date,type,importance,details,description,status,object_1) values ('$TIMESTAMP','SERVER ADD','1','SERVER ADD $NEW_HOST_NAME BY $USERNAME','The host $NEW_HOST_NAME has been added to the database by $USERNAME','(select server_id from servers where hostname='$NEW_HOST_NAME')')" | sql_update
+    echo "$TIMESTAMP - SERVER ADD - $USERNAME - The host $NEW_HOST_NAME has been added to the database by $USERNAME" >> $ACTIVITY_LOG
+    DO=SERVER
+  } || {
+    DO=ADD_REQUEST
+  }
+}
+
+
+###################################################################################
+#### If they want to edit a server, Edit it here then display below
+###################################################################################
+
+[[ $DO == EDIT ]] && {
+  [[ -n $NEW_ALIAS ]] && {
+    UPDATE="$UPDATE|alias='$NEW_ALIAS'"
+  }
+  [[ -n $NEW_FILE ]] && {
+    UPDATE="$UPDATE|file='$NEW_FILE'"
+  }
+  [[ -n $NEW_NAG_ADD ]] && {
+    UPDATE="$UPDATE|nag_address='$NEW_NAG_ADD'"
+  }
+  [[ -z $NEW_STATUS ]] && NEW_STATUS="OK"
+    UPDATE="$UPDATE|status='$NEW_STATUS'"
+
+  [[ -n $NEW_LOCATION ]] && {
+    UPDATE="$UPDATE|location='$NEW_LOCATION'"
+  }
+  [[ -n $NEW_NAG_LOCATION ]] && {
+    UPDATE="$UPDATE|nag_location='$NEW_NAG_LOCATION'"
+  }
+
+  [[ $NEW_STATUS == DEPRECATED ]] && {
+    D_HOSTNAME=$(echo "select hostname from servers where server_id='$SERVER';" |sql_query)
+    echo "insert into DEPRECATED_SERVERS (server_id,hostname,location,role,file,type,puppet,mco,file_systems,nfs_file_systems,nag_address,ip_addresses,interfaces,barcode,alias,status,nag_location) (select server_id,hostname,location,role,file,type,puppet,mco,file_systems,nfs_file_systems,nag_address,ip_addresses,interfaces,barcode,alias,status,nag_location from servers where server_id='$SERVER');" | sql_update
+    [[ -z $(echo "select server_id from DEPRECATED_SERVERS where server_id='$SERVER';" |sql_update) ]] && {
+      ERROR="$ERROR <br> There was a problem deprecating this server"
+    } || {
+      echo "delete from SERVERS where server_id='$SERVER';" | sql_update
+      [[ -z $ERROR ]] && ERROR="This server has now been deprecated"
+      DO=EMPTY
+      echo "insert into complaint_log (create_date,type,importance,details,description,object_1) values ('$TIMESTAMP','SERVER DEP','1','SERVER DEP $D_HOSTNAME BY $USERNAME','The host $D_HOSTNAME has been deprecated from the database by $USERNAME','$SERVER');" | sql_update
+    echo "$TIMESTAMP - SERVER DEP - $USERNAME - The host $D_HOSTNAME has been deprecated from the database by $USERNAME" >> $ACTIVITY_LOG
+    }
+  }
+
+  [[ -z $ERROR ]] && {
+    UPDATE_SQL=$(echo $UPDATE | sed 's/^|*//;s/|*$//;s/|/,/g')
+    echo "update servers set $UPDATE_SQL where server_id='$SERVER';" |sql_update
+  }
+  [[ $DO != EMPTY ]] && DO=SERVER
+}
+
+###################################################################################
+#### If they want to add a server, Show the add server screen
+###################################################################################
+
+[[ $DO == ADD_REQUEST ]] && {
+  [[ -z $STATUS ]] && STATUS=QUIET
+	[[ ! -z $ERROR ]] && echo $QUERY_STRING
+	cat <<- EOF
+	<p id=error>$ERROR</p>
+	<form method=POST action=/cgi-bin/auth.cgi>
+	<br>
+	<table border=1 cellpadding=4 cellspacing=0>
+	<tr><td align=left>Name</td><td align=right colspan=2>&nbsp&nbsp&nbsp&nbsp<INPUT name=NEW_HOST_NAME TYPE=text value="$NEW_HOST_NAME" size=64></td></tr>
+	<tr><td align=left>Starting Status</td><td align=right colspan=2><select name=NEW_STATUS>
+		<option value=$STATUS>$STATUS</option>
+		<option value=OK>OK</option>
+		<option value=QUIET>Quiet</option>
+		<option value=QUIESCE>Quiesce</option>
+		<option value=OMIT>Omit</option>
+		<option value=DEPRECATED>Deprecated</option>
+	</select></td></td></tr>
+	<tr><td align=left>Nagios Address<br><small>IP or Hostname to monitor</small></td><td align=right colspan=2><INPUT name=NEW_NAG_ADD TYPE=text value="$NEW_NAG_ADD" size=24></td></td></tr>
+	<tr><td align=left>Role</td><td align=right><select name=NEW_ROLE>
+		<option VALUE="$NEW_ROLE">$(echo "select name from role where role_id='$NEW_ROLE';"|sql_query)</option>
+		$(while IFS="|" read C_ROLE_ID C_ROLE_NAME _ ; do
+			[[ ! -z $C_ROLE_NAME ]] && echo "<option VALUE=\"$C_ROLE_ID\">$C_ROLE_NAME</option>"
+		done< <(echo "select role_id,name from role"|sql_query) )
+		</select>
+		</td></tr>
+	<tr><td align=left>Location</td><td align=right><select name=NEW_LOCATION>
+		<option>$NEW_LOCATION</option>
+		<option>savvis</option>
+		<option>amz1</option>
+		<option>amz1oregon</option>
+		</select>
+		</td></tr></table>
+		<br><br>
+	<input type=submit value="Add This Host">
+	<input type=hidden name=SCR value=$SCR>
+	<input type=hidden name=DO value=ADD>
+	</form>
+	EOF
+	
+}
+
+###################################################################################
+#### Finally show the server
+###################################################################################
+
+
+[[ $DO == SERVER ]] && {
+	IFS="|" read HOST_NAME ALIAS FILE TYPE PUPPET MCO STATUS FS NFS_FS NAG_ADD ADDS INTS ROLE ROLE_ID LOC NAG_LOCATION<<< "$(echo "select S.hostname,S.alias,S.file,S.type,S.puppet,S.mco,S.status,S.file_systems,S.nfs_file_systems,S.nag_address,S.ip_addresses,S.interfaces,R.name,R.role_id,S.location,S.nag_location from servers S,role R where S.server_id='$SERVER' and S.role=R.role_id;"|sql_query)"
+
+	cat <<- EOF
+	<p id=error>$ERROR</p>
+	<form method=POST action=/cgi-bin/auth.cgi>
+	<center><b>$HOST_NAME</b></center>
+	<br>
+	<table border=1 cellpadding=4 cellspacing=0>
+	<tr><td align=left>Alias Name</td><td align=right colspan=2>&nbsp&nbsp&nbsp&nbsp<INPUT name=NEW_ALIAS TYPE=text value="$ALIAS" size=64></td></tr>
+	<tr><td align=left>File Name</td><td align=right colspan=2><INPUT name=NEW_FILE TYPE=text value="$FILE" size=64></td></td></tr>
+	<tr><td align=left>Status</td><td align=right colspan=2><select name=NEW_STATUS>
+		<option value=$STATUS>$STATUS</option>
+		<option value=OK>OK</option>
+		<option value=QUIET>Quiet</option>
+		<option value=QUIESCE>Quiesce</option>
+		<option value=OMIT>Omit</option>
+		<option value=DEPRECATED>Deprecated</option>
+		</select></td></td></tr>
+	<tr><td align=left>Nagios Address</td><td align=right colspan=2><INPUT name=NEW_NAG_ADD TYPE=text value="$NAG_ADD" size=64></td></td></tr>
+	EOF
+	ROLE_URL="/cgi-bin/auth.cgi?SCR=role_edit&DO=ROLE&ROLE_ID=$ROLE_ID"
+
+	[[ $MCO == TRUE ]] && {
+	cat <<- EOF
+	<tr><td align=left>Nagios Location</td><td align=right><select name=NEW_NAG_LOCATION>
+
+	  <option value=$NAG_LOCATION>$NAG_LOCATION</option>
+	  <option value=any>any</option>
+	  #<option value=savvis>savvis</option>
+	  #<option value=amz1>amz1</option>
+	  #<option value=amz1oregon>amz1oregon</option>
+    $(while IFS="|" read SITE _; do
+	   echo "<option value=$SITE>$SITE</option>"
+    done< <(echo "select distinct site_name from sites where site_name != '$NAG_LOCATION';" | sql_query ))
+
+	  </select>
+    </td></td></tr>
+
+	<tr><td colspan=2 bgcolor="#F0F0F0" align=center valign=bottom><b>These are facts I'm tracking about the device</b></td><tr>
+	<tr><td align=left>Puppetized</td><td align=right>$PUPPET</td></td></tr>
+	<tr><td align=left>MCollective</td><td align=right>$MCO</td></td></tr>
+	<tr><td align=left>Role</td><td align=right><a href="$ROLE_URL">$ROLE</a></td></tr>
+	<tr><td align=left>Location</td><td align=right>$LOC</td></td></tr>
+	<tr><td align=left>System Type</td><td align=right>$TYPE</td></tr>
+	<tr><td align=left>File Systems</td><td align=right>$FS</td></td></tr>
+	<tr><td align=left>NFS File Systems</td><td align=right>$NFS_FS</td></td></tr>
+	<tr><td align=left>IP Addresses</td><td align=right>$ADDS</td></td></tr>
+	<tr><td align=left>Interfaces</td><td align=right>$INTS</td></td></tr>
+
+	EOF
+	} || {
+	cat <<- EOF
+	<tr><td colspan=3 bgcolor="#F0F0F0" align=center valign=bottom><b>Edit information about the host</b></td><tr>
+	<tr><td align=left>Puppetized</td><td align=right>FALSE</td><td align=right>Cannot Edit</td></tr>
+	<tr><td align=left>MCollective</td><td align=right>FALSE</td><td align=right>Cannot Edit</td></tr>
+	<tr><td align=left>Role</td><td align=right><a href="$ROLE_URL">$ROLE</a></td><td align=right><select name=ROLE>
+		<option VALUE="$ROLE_ID">$ROLE</option>
+		$(while IFS="|" read C_ROLE_ID C_ROLE_NAME _ ; do
+			echo "<option VALUE=\"$C_ROLE_ID\">$C_ROLE_NAME</option>"
+		done< <(echo "select role_id,name from role"|sql_query) )
+		</select>
+		</td></tr>
+	<tr><td align=left>Location</td><td align=right>$LOC</td><td align=right><select name=NEW_LOCATION>
+		<option>$LOC</option>
+		<option>savvis</option>
+		<option>amz1</option>
+		<option>amz1oregon</option>
+		</select>
+		</td></tr>
+	<tr><td align=left>Nagios Location</td><td align=right>$NAG_LOCATION</td><td align=right><select name=NEW_NAG_LOCATION>
+	  <option value=$NAG_LOCATION>$NAG_LOCATION</option>
+	  <option value=any>any</option>
+	  <option value=savvis>savvis</option>
+	  <option value=amz1>amz1</option>
+	  <option value=amz1oregon>amz1oregon</option>
+	  </select></td></td></tr>
+	<tr><td align=left>System Type</td><td align=right>$TYPE</td></tr>
+	<tr><td align=left>File Systems</td><td align=right>$FS</td></td></tr>
+	<tr><td align=left>NFS File Systems</td><td align=right>$NFS_FS</td></td></tr>
+	<tr><td align=left>Nagios Address</td><td align=right>$NAG_ADD</td></td></tr>
+	<tr><td align=left>IP Addresses</td><td align=right>$ADDS</td></td></tr>
+	<tr><td align=left>Interfaces</td><td align=right>$INTS</td></td></tr>
+	EOF
+	}
+	cat <<- EOF
+	</table>
+	<input type=submit value="Edit This Host">
+	<input type=hidden name=SCR value=$SCR>
+	<input type=hidden name=SERVER value=$SERVER>
+	<input type=hidden name=DO value=EDIT>
+	</form><br>
+	<center><b>Host Information</b></center>
+	Here are the services I monitor:
+	<table border=0 cellspacing=0 cellpadding=5 align=center>
+	EOF
+  i=0; SEARCH="( "
+  for SERVICE_ID in $(echo "select R.services from servers S,role R where S.server_id='$SERVER' and S.role=R.role_id;" | sql_query) ; do
+    [[ $i == 1 ]] && SEARCH="$SEARCH or "
+    SEARCH="$SEARCH service_id=$SERVICE_ID"
+    i=1
+  done
+  SEARCH="$SEARCH ) and (location='$LOC' or location is null)"
+
+  a=0
+  for SERVICE in $(echo "select name,service_id from services where $SEARCH" | sql_query) ; do
+    [[ $a == 0 ]] && echo "<tr>"
+    echo "<td align=center><a href=\"/cgi-bin/auth.cgi/?SCR=service_edit&DO=SRV&SRV_ID=${SERVICE#*|}\">${SERVICE%|*}</a></td>"
+    a=$(($a+1))
+    [[ $a == 4 ]] && { echo "</tr>"; a=0; }
+  done
+  echo "</table><br><br>"
+
+  echo "Here are the other systems in the role $ROLE"
+  echo "<table border=0 cellspacing=0 cellpadding=5 align=center>"
+  a=0
+  while IFS="|" read HOST HOST_ID _ ; do
+    [[ $a == 0 ]] && echo "<tr>"
+    echo "<td align=center><a href=\"/cgi-bin/auth.cgi/?SCR=host_edit&DO=SERVER&SERVER=${HOST_ID}\">${HOST}</a></td>"
+    a=$(($a+1))
+    [[ $a == 5 ]] && { echo "</tr>"; a=0; }
+  done< <(echo "select hostname,server_id from servers where role='$ROLE_ID'" | sql_query)
+  echo "</table><br><br>"
+
+}
+

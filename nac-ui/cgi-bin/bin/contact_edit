@@ -1,0 +1,522 @@
+#!/bin/bash
+
+# set some variables
+. $(cat varset)
+
+use_admin_functions
+use_base_functions
+use_bust_functions
+use_date_functions
+use_check_functions
+use_form_functions
+
+#echo $QUERY_STRING
+hno=0
+sno=0
+for X in  ${QUERY_STRING//&/ }; do
+  case $X in
+    SCR=*) SCR=${X#*=};;
+    DO=*) DO=${X#*=};;
+    CONTACT_ID=*) CONTACT_ID=${X#*=};;
+    CONTACT_GROUP_ID=*) CONTACT_GROUP_ID=${X#*=};;
+
+    DEL_NAME=*) NEW_NAME=$(bustit ${X#*=});;
+    DEL_GROUP_NAME=*) NEW_NAME=$(bustit ${X#*=});;
+
+    NEW_NAME=*) NEW_NAME=$(bustit ${X#*=});;
+    NEW_BUILD_NAME=*) NEW_BUILD_NAME=$(bustit ${X#*=}|tr " [:upper:]" "_[:lower:]");;
+    NEW_ALIAS=*) NEW_ALIAS=$(bustit ${X#*=})
+	[[ -z $NEW_ALIAS ]] && NEW_ALIAS="_";;
+    NEW_EMAIL=*) NEW_EMAIL=$(bustit ${X#*=})
+	[[ -z $NEW_EMAIL ]] && NEW_EMAIL="_";;
+    NEW_PAGER=*) NEW_PAGER=$(bustit ${X#*=})
+	[[ -z $NEW_PAGER ]] && NEW_PAGER="_";;
+    NEW_SERVICE_NOTE_PERIOD=*) NEW_SERVICE_NOTE_PERIOD=$(bustit ${X#*=});;
+    NEW_HOST_NOTE_PERIOD=*) NEW_HOST_NOTE_PERIOD=$(bustit ${X#*=});;
+    NEW_SERVICE_NOTE_OPTIONS=*) NEW_SERVICE_NOTE_OPTIONS[sno++]=$(bustit ${X#*=});;
+    NEW_HOST_NOTE_OPTIONS=*) NEW_HOST_NOTE_OPTIONS[hno++]=$(bustit ${X#*=});;
+    NEW_SERVICE_NOTE_COMMANDS=*) NEW_SERVICE_NOTE_COMMANDS=$(bustit ${X#*=});;
+    NEW_HOST_NOTE_COMMANDS=*) NEW_HOST_NOTE_COMMANDS=$(bustit ${X#*=});;
+
+    NEW_GROUP_NAME=*) NEW_GROUP_NAME=$(bustit ${X#*=});;
+    NEW_GROUP_BUILD_NAME=*) NEW_GROUP_BUILD_NAME=$(bustit ${X#*=});;
+    NEW_GROUP_ALIAS=*) NEW_GROUP_ALIAS=$(bustit ${X#*=});;
+    NEW_GROUP_MEMBER=*) NEW_GROUP_MEMBER=$(bustit ${X#*=});;
+    DEL_GROUP_MEMBER=*) DEL_GROUP_MEMBER="$DEL_GROUP_MEMBER|$(bustit ${X#*=})";;
+    NEW_CONTACT_GROUP=*) NEW_CONTACT_GROUP=$(bustit ${X#*=});;
+    DEL_CONTACT_GROUP=*) DEL_CONTACT_GROUP="$DEL_CONTACT_GROUP|$(bustit ${X#*=})";;
+
+    ADD_OPTION=*) ADD_OPTION=${X#*=};;
+    RM_OPTION=*) RM_OPTION=${X#*=};;
+  esac
+done
+
+[[ $DO == NEW ]] && {
+  BUILD_NAME=$(echo $NEW_NAME | tr " [:upper:]" "_[:lower:]")
+  [[ ${#NEW_NAME} -gt 64 ]] && ERROR="$ERROR<br>That name is too long. Please pick something shorter"
+  [[ ${#NEW_NAME} -lt 4 ]] && ERROR="$ERROR<br>That name is too short. Please pick something longer"
+  [[ ! -z "$(echo "${NEW_NAME}" | tr -d "[ A-Za-z0-9+_.\-]")" ]] && ERROR="$ERROR <br> Invalid charcters in the name"
+  REPEAT=$(echo "select name from contacts where name='$NEW_NAME' or build_name='$BUILD_NAME';" |sql_query)
+  [[ ! -z $REPEAT ]] && ERROR="${ERROR} <br> That name already exists Please choose another"
+  [[ -z $ERROR ]] && {
+    echo "insert into contacts (name,build_name) values ('$NEW_NAME','$BUILD_NAME');"|sql_update
+    CONTACT_ID=$(echo "select contact_id from contacts where name='$NEW_NAME';" |sql_query)
+    DO=CONTACT
+  } || {
+    echo "<p id=error>$ERROR</p>"
+    DO=SHOW
+  }
+}
+[[ $DO == NEW_GROUP ]] && {
+  BUILD_NAME=$(echo $NEW_GROUP_NAME | tr " [:upper:]" "_[:lower:]")
+  [[ ${#NEW_GROUP_NAME} -gt 64 ]] && ERROR="$ERROR<br>That name is too long. Please pick something shorter"
+  [[ ${#NEW_GROUP_NAME} -lt 4 ]] && ERROR="$ERROR<br>That name is too short. Please pick something longer"
+  [[ ! -z "$(echo "${NEW_GROUP_NAME}" | tr -d "[ A-Za-z0-9+_.\-]")" ]] && ERROR="$ERROR <br> Invalid charcters in the name"
+  REPEAT=$(echo "select name from contact_groups where name='$NEW_GROUP_NAME';" |sql_query)
+  [[ ! -z $REPEAT ]] && ERROR="${ERROR} <br> That name already exists Please choose another"
+  [[ -z $ERROR ]] && {
+    echo "insert into contact_groups (name,build_name) values ('$NEW_GROUP_NAME','$BUILD_NAME');"|sql_update
+    CONTACT_GROUP_ID=$(echo "select contact_group_id from contact_groups where name='$NEW_GROUP_NAME';" |sql_query)
+    DO=CONTACT_GROUP
+  } || {
+    echo "<p id=error>$ERROR</p>"
+    DO=SHOW
+  }
+}
+[[ $DO == DELETE ]] && {
+  REPEAT=$(echo "select name from contacts where contact_id='$CONTACT_ID';" |sql_query)
+  [[ -z $REPEAT ]] && ERROR="$ERROR <br> That contact does not exist"
+  #### <<--  check to see if this service is beign used anywhere
+  # Check contact groups members
+  # Check contact escalations members contact
+  unset INCTGNAME
+  while IFS="|" read CTG_NAME CTG_ID CTG_MEMBERS ; do
+   for X in $(echo $CTG_MEMBERS | tr "," " ") ; do
+    [[ $X == $CONTACT_ID ]] && INCTGNAME="$INCTGNAME,<a href=/cgi-bin/auth.cgi?SCR=contact_edit&DO=CONTACT_GROUP&CONTACT_GROUP_ID=${CTG_ID}>$CTG_NAME</a>"
+   done
+  done< <(ec  "select name,contact_group_id,members from contact_groups;" |sql_query)
+  [[ -n $INCTGNAME ]] && ERROR="${ERROR} <br> That contact is a memeber of these contact groups: $INCTGNAME "
+
+  unset INESCNAME
+  while IFS="|" read CTE_NAME CTE_ID CTE_MEMBERS ; do
+   for X in $(echo $CTE_MEMBERS | tr "," " ") ; do
+    [[ $X == $CONTACT_ID ]] && INESCNAME="$INESCNAME,<a href=/cgi-bin/auth.cgi?SCR=esc_edit&DO=ESC&ESC_ID=${CTE_ID}>$CTE_NAME</a>"
+   done
+  done< <(echo "select name,esc_id,contact from escalations;" |sql_query)
+
+  [[ -n $INCTGNAME ]] && ERROR="${ERROR}<br>This contact still exists in $INCTGNAME"
+  [[ -z $ERROR ]] && {
+    echo "delete from contacts where contact_id='$CONTACT_ID'"|sql_update
+    DO=SHOW
+  } || {
+    DO=CONTACT
+  }
+}
+[[ $DO == DELETE_GROUP ]] && {
+  REPEAT=$(echo "select name from contact_groups where contact_group_id='$CONTACT_GROUP_ID';" |sql_query)
+  [[ -z $REPEAT ]] && ERROR="$ERROR <br> That contact group does not exist"
+  #### <<--  check to see if this service is beign used anywhere
+  # Check: service_template: contact groups
+  # Check: host_template: contact groups
+  # Check: escalations: contact groups
+  unset INCTGNAME
+  while IFS="|" read CTG_NAME CTG_ID CTG_MEMBERS ; do
+   for X in $(echo $CTG_MEMBERS | tr "," " ") ; do
+    [[ $X == $CONTACT_ID ]] && INCTGNAME="$INCTGNAME,<a href=/cgi-bin/auth.cgi?SCR=contact_edit&DO=CONTACT_GROUP&CONTACT_GROUP_ID=${CTG_ID}>$CTG_NAME</a>"
+   done
+  done< <(echo "select name,contact_group_id,members from contact_groups;" |sql_query)
+  
+  [[ -z $ERROR ]] && {
+    #echo "delete from contacts where contact_id='$CONTACT_ID'"|sql_update
+    echo "delete from contacts where contact_id='$CONTACT_ID'"
+    DO=SHOW
+  } || {
+    DO=HOST_TMP
+  }
+}
+
+[[ -z $DO || $DO == SHOW ]] && {
+cat <<- EOF
+  <center><b>Contacts</center></b><br>
+  <form method=POST action=/cgi-bin/auth.cgi>
+    <center>New Contact Name: <input type=text name="NEW_NAME" size="30">
+    <input type=hidden name=SCR value=$SCR>
+    <input type=hidden name=DO value=NEW>
+    <input type=submit value="Add It">
+  </form></center><br>
+  <table border=1 cellspacing=0 cellpadding=5 align=center>
+EOF
+  i=1
+  while IFS="|" read CONTACT_ID NAME _ ; do 
+    [[ $i == 0 ]] && echo "<tr>"
+    echo "<td><a href=\"/cgi-bin/auth.cgi?SCR=$SCR&DO=CONTACT&CONTACT_ID=$CONTACT_ID\">$NAME</a></td>"
+    [[ $i == 4 ]] && { echo "</tr>"; i=0; }
+    i=$(($i+1))
+  done< <(echo "select contact_id,name from contacts order by name" | sql_query)
+  echo "</table>"
+
+cat <<- EOF
+  <center><b>Contact Groups</center></b><br>
+  <form method=POST action=/cgi-bin/auth.cgi>
+    <center>New Contact Group Name: <input type=text name="NEW_GROUP_NAME" size="30">
+    <input type=hidden name=SCR value=$SCR>
+    <input type=hidden name=DO value=NEW_GROUP>
+    <input type=submit value="Add It">
+  </form></center><br>
+  <table border=1 cellspacing=0 cellpadding=5 align=center>
+EOF
+  i=1
+  while IFS="|" read CONTACT_GROUP_ID NAME _ ; do 
+    [[ $i == 0 ]] && echo "<tr>"
+    echo "<td><a href=\"/cgi-bin/auth.cgi?SCR=$SCR&DO=CONTACT_GROUP&CONTACT_GROUP_ID=$CONTACT_GROUP_ID\">$NAME</a></td>"
+    [[ $i == 4 ]] && { echo "</tr>"; i=0; }
+    i=$(($i+1))
+  done< <(echo "select contact_group_id,name from contact_groups order by name" | sql_query)
+  echo "</table>"
+  exit 0
+}
+
+[[ $DO == UPDATE ]] && {
+  ## do your checks
+  EXISTS=$(echo "select contact_id from contacts where contact_id='$CONTACT_ID';" |sql_query)
+  [[ -z $EXISTS ]] && {
+  ERROR="$ERROR <br> That Contact does not exist"
+  } || {
+  ##### The following needs to be fixed. Check NEW CONTACT NAME for exploits and use a different bustit (sql)
+  [[ -n $ADD_OPTION ]] && {
+    case $ADD_OPTION in
+      alias) UPDATE="$UPDATE|alias='_'" ;;
+      email) UPDATE="$UPDATE|email='_'" ;;
+      pager) UPDATE="$UPDATE|pager='_'" ;;
+      service_notification_period) UPDATE="$UPDATE|service_notification_period='0'" ;;
+      host_notification_period) UPDATE="$UPDATE|host_notification_period='0'" ;;
+      service_notification_options) UPDATE="$UPDATE|service_notification_options='w,u,c,r'" ;;
+      host_notification_options) UPDATE="$UPDATE|host_notification_options='d,r'" ;;
+      service_notification_commands) UPDATE="$UPDATE|service_notification_commands='notify-service-by-email'" ;;
+      host_notification_commands) UPDATE="$UPDATE|host_notification_commands='notify-service-by-email'" ;;
+    esac
+  }
+
+  [[ -n $RM_OPTION ]] && {
+    case $RM_OPTION in
+      alias) UPDATE="$UPDATE|alias=NULL";unset NEW_ALIAS ;;
+      email) UPDATE="$UPDATE|email=NULL";unset NEW_EMAIL ;;
+      pager) UPDATE="$UPDATE|pager=NULL";unset NEW_PAGER ;;
+      service_notification_period) UPDATE="$UPDATE|service_notification_period=NULL";unset NEW_SERVICE_NOTE_PERIOD ;;
+      host_notification_period) UPDATE="$UPDATE|host_notification_period=NULL" ; unset NEW_HOST_NOTE_PERIOD ;;
+      service_notification_options) UPDATE="$UPDATE|service_notification_options=NULL" ; unset NEW_SERVICE_NOTE_OPTIONS ;;
+      host_notification_options) UPDATE="$UPDATE|host_notification_options=NULL" ; unset NEW_HOST_NOTE_OPTIONS ;;
+      service_notification_commands) UPDATE="$UPDATE|service_notification_commands=NULL" ; unset NEW_SERVICE_NOTE_COMMANDS ;;
+      host_notification_commands) UPDATE="$UPDATE|host_notification_commands=NULL" ; unset NEW_HOST_NOTE_COMMAND ;;
+    esac
+  }
+  [[ -z $NEW_NAME ]] && ERROR="$ERROR<br>A name is required"
+  [[ -z $NEW_BUILD_NAME ]] && ERROR="$ERROR<br>A nagios name is required"
+  [[ ${#NEW_NAME} -gt 64 ]] && ERROR="$ERROR<br>That name is too long. Please pick something shorter"
+  [[ ${#NEW_BUILD_NAME} -gt 64 ]] && ERROR="$ERROR<br>That nagios name is too long. Please pick something shorter"
+  [[ ${#NEW_NAME} -lt 4 ]] && ERROR="$ERROR<br>That name is too short. Please pick something longer"
+  [[ ${#NEW_BUILD_NAME} -lt 4 ]] && ERROR="$ERROR<br>That nagios name is too short. Please pick something longer"
+  [[ ! -z "$(echo "${NEW_NAME}" | tr -d "[ A-Za-z0-9+_.\-]")" ]] && ERROR="$ERROR <br> Invalid charcters in the name"
+  [[ ! -z "$(echo "${NEW_BUILD_NAME}" | tr -d "[A-Za-z0-9+_.\-]")" ]] && ERROR="$ERROR <br> Invalid charcters in the name"
+  REPEAT=$(echo "select name from contacts where ( name='$NEW_NAME' or build_name='$BUILD_NAME' ) and contact_id!='$CONTACT_ID';" |sql_query)
+  [[ ! -z $REPEAT ]] && ERROR="${ERROR} <br> That name already exists Please choose another"
+  [[ -z $ERROR ]] && UPDATE="$UPDATE|name='$NEW_NAME'|build_name='$NEW_BUILD_NAME'"
+
+  [[ -n $NEW_EMAIL ]] && {
+    [[ ${#NEW_EMAIL} -gt 64 ]] && ERROR="$ERROR<br>That email address is too long. Please pick something shorter"
+    [[ ! -z "$(echo "${NEW_EMAIL}" | tr -d "[@A-Za-z0-9+_.\-]")" ]] && ERROR="$ERROR <br> Invalid charcters in the email address"
+    [[ -z $ERROR ]] && {
+        UPDATE="$UPDATE|email='$NEW_EMAIL'"
+    }
+  }
+  [[ -n $NEW_PAGER ]] && {
+    [[ ${#NEW_PAGER} -gt 64 ]] && ERROR="$ERROR<br>That pager address is too long. Please pick something shorter"
+    [[ ! -z "$(echo "${NEW_PAGER}" | tr -d "[@A-Za-z0-9+_.\-]")" ]] && ERROR="$ERROR <br> Invalid charcters in the pager address"
+    [[ -z $ERROR ]] && {
+        UPDATE="$UPDATE|pager='$NEW_PAGER'"
+    }
+  }
+  [[ -n $NEW_ALIAS ]] && {
+    [[ ${#NEW_ALIAS} -gt 64 ]] && ERROR="$ERROR<br>That alias is too long. Please pick something shorter"
+    [[ ! -z "$(echo "${NEW_ALIAS}" | tr -d "[ A-Za-z0-9+_.\-]")" ]] && ERROR="$ERROR <br> Invalid charcters in the alias"
+    [[ -z $ERROR ]] && {
+        UPDATE="$UPDATE|alias='$NEW_ALIAS'"
+    }
+  }
+
+  [[ -n $NEW_SERVICE_NOTE_PERIOD ]] && {
+    NEW_SERVICE_NOTE_PERIOD_ID=$(check_time_period "$NEW_SERVICE_NOTE_PERIOD")
+    [[ $? != 0 ]] && ERROR="$ERROR<br>$NEW_SERVICE_NOTE_PERIOD_ID"
+    [[ -n $NEW_SERVICE_NOTE_PERIOD_ID && -z $ERROR ]] && {
+        UPDATE="$UPDATE|service_notification_period='$NEW_SERVICE_NOTE_PERIOD_ID'"
+    }
+  }
+  [[ -n $NEW_HOST_NOTE_PERIOD ]] && {
+    NEW_HOST_NOTE_PERIOD_ID=$(check_time_period "$NEW_HOST_NOTE_PERIOD")
+    [[ $? != 0 ]] && ERROR="$ERROR<br>$NEW_HOST_NOTE_PERIOD_ID"
+    [[ -n $NEW_HOST_NOTE_PERIOD_ID && -z $ERROR ]] && {
+        UPDATE="$UPDATE|host_notification_period='$NEW_HOST_NOTE_PERIOD_ID'"
+    }
+  }
+  [[ -n "$NEW_SERVICE_NOTE_OPTIONS" ]] && {
+    check_set_service_note_options "service_notification_options"
+  }
+  [[ -n "$NEW_HOST_NOTE_OPTIONS" ]] && {
+    check_set_host_note_options "host_notification_options"
+  }
+  [[ -n "$NEW_SERVICE_NOTE_COMMANDS" ]] && {
+    [[ $NEW_SERVICE_NOTE_COMMANDS == "notify-service-by-epager" || $NEW_SERVICE_NOTE_COMMANDS == "notify-service-by-email" ]] || ERROR="$ERROR <br> Invalid option for service notification command"
+    [[ -z $ERROR ]] && {
+        UPDATE="$UPDATE|service_notification_commands='$NEW_SERVICE_NOTE_COMMANDS'"
+    }
+  }
+  [[ -n "$NEW_HOST_NOTE_COMMANDS" ]] && {
+    [[ -z $(echo "select name from commands where name = '$NEW_HOST_NOTE_COMMANDS'" | sql_query) ]] && ERROR="$ERROR <br> Invalid option for host notification command"
+    [[ -z $ERROR ]] && {
+        UPDATE="$UPDATE|host_notification_commands='$NEW_HOST_NOTE_COMMANDS'"
+    }
+  }
+
+  [[ -z $ERROR ]] && {
+    UPDATE_SQL=$(echo $UPDATE | sed 's/^|*//;s/|*$//;s/|/,/g')
+    echo "update contacts set $UPDATE_SQL where contact_id='$CONTACT_ID';" | sql_update
+  }
+
+  }
+  DO=CONTACT
+}
+
+[[ $DO == CONTACT ]] && {
+  IFS="|" read NAME BUILD_NAME ALIAS EMAIL PAGER SERVICE_NOTE_PERIOD HOST_NOTE_PERIOD SERVICE_NOTE_OPTIONS HOST_NOTE_OPTIONS SERVICE_NOTE_COMMANDS HOST_NOTE_COMMANDS _ <<< "$(echo "select name,build_name,alias,email,pager,service_notification_period,host_notification_period,service_notification_options,host_notification_options,service_notification_commands,host_notification_commands from contacts where contact_id='$CONTACT_ID';" | sql_query)"
+	cat <<- EOF
+	  <p id=error>$ERROR</p>
+	  <form method=POST action=/cgi-bin/auth.cgi>
+	  <center><b>$BUILD_NAME</b></center>
+	  <br>
+	  Name: <input type=text name="NEW_NAME" value="$NAME" size="100"><br>
+	  Nagios Name: <input type=text name="NEW_BUILD_NAME" value="$BUILD_NAME" size="100"><br>
+	EOF
+
+          [[ -n $ALIAS ]] && {
+		[[ $ALIAS == "_" ]] && unset ALIAS
+            echo "<br>Alias: <input type=text name=\"NEW_ALIAS\" value=\"$ALIAS\" size=\"64\"><br>"
+            RM_OPTIONS_LIST="$RM_OPTIONS_LIST|alias"
+          } || ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|alias"
+          [[ -n $EMAIL ]] && {
+		[[ $EMAIL == "_" ]] && unset EMAIL
+            echo "<br>Email: <input type=text name=\"NEW_EMAIL\" value=\"$EMAIL\" size=\"64\"><br>"
+            RM_OPTIONS_LIST="$RM_OPTIONS_LIST|email"
+          } || ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|email"
+
+          [[ -n $PAGER ]] && {
+		[[ $PAGER == "_" ]] && unset PAGER
+            echo "<br>Pager: <input type=text name=\"NEW_PAGER\" value=\"$PAGER\" size=\"64\"><br>"
+            RM_OPTIONS_LIST="$RM_OPTIONS_LIST|pager"
+          } || ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|pager"
+
+          [[ -n $SERVICE_NOTE_PERIOD ]] && {
+            echo "<br>Service Notification Period: "; show_timeperiod "NEW_SERVICE_NOTE_PERIOD" "$SERVICE_NOTE_PERIOD"
+	    echo "<br>"
+            RM_OPTIONS_LIST="$RM_OPTIONS_LIST|service_notification_period"
+          } || ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|service_notification_period"
+          [[ -n $HOST_NOTE_PERIOD ]] && {
+            echo "<br>Host Notification Period: "; show_timeperiod "NEW_HOST_NOTE_PERIOD" "$HOST_NOTE_PERIOD"
+	    echo "<br>"
+            RM_OPTIONS_LIST="$RM_OPTIONS_LIST|host_notification_period"
+          } || ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|host_notification_period"
+
+          [[ -n $SERVICE_NOTE_OPTIONS ]] && {
+	   echo "Service Notification Options: "
+	    show_service_note_options "select service_notification_options from contacts where contact_id='$CONTACT_ID';"
+            RM_OPTIONS_LIST="$RM_OPTIONS_LIST|service_notification_options"
+          } || ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|service_notification_options"
+          [[ -n $HOST_NOTE_OPTIONS ]] && {
+	    echo "Host Notification Options: "
+	    show_host_note_options "select host_notification_options from contacts where contact_id='$CONTACT_ID';"
+            RM_OPTIONS_LIST="$RM_OPTIONS_LIST|host_notification_options"
+          } || ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|host_notification_options"
+
+          [[ -n $SERVICE_NOTE_COMMANDS ]] && {
+	    echo "Service Notification Command: "
+	    echo "<select name=\"NEW_SERVICE_NOTE_COMMANDS\">"
+	    echo "  <option>$SERVICE_NOTE_COMMANDS</option>"
+	    echo "  <option value=\"notify-service-by-epager\">notify-service-by-epager</option>"
+	    echo "  <option value=\"notify-service-by-email\">notify-service-by-email</option>"
+	    echo "</select><br>"
+            RM_OPTIONS_LIST="$RM_OPTIONS_LIST|service_notification_commands"
+          } || ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|service_notification_commands"
+          [[ -n $HOST_NOTE_COMMANDS ]] && {
+	    echo "Host Notification Command: "
+	    echo "<select name=\"NEW_HOST_NOTE_COMMANDS\">"
+	    echo "  <option>$HOST_NOTE_COMMANDS</option>"
+	    echo "  <option value=\"notify-host-by-epager\">notify-host-by-epager</option>"
+	    echo "  <option value=\"notify-host-by-email\">notify-host-by-email</option>"
+	    echo "</select>"
+            RM_OPTIONS_LIST="$RM_OPTIONS_LIST|host_notification_commands"
+          } || ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|host_notification_commands"
+
+	add_remove_options
+
+	cat <<- EOF
+	  <br><br>
+	  <input type=hidden name=SCR value=$SCR>
+	  <input type=hidden name=DO value=UPDATE>
+	  <input type=hidden name=CONTACT_ID value=$CONTACT_ID>
+	  <input type=submit value="Update This Contact">
+	  </form><br>
+	  <form method=POST action=/cgi-bin/auth.cgi>
+	  <input type=hidden name=SCR value=$SCR>
+	  <input type=hidden name=DO value=DELETE>
+	  <input type=hidden name=CONTACT_ID value=$CONTACT_ID>
+	  <input type=submit value="Delete This Contact">
+	  </form><br>
+	EOF
+}
+
+######################################################################################################################
+###############    WORK WITH THE GROUP BELOW HERE
+######################################################################################################################
+
+[[ $DO == UPDATE_GROUP ]] && {
+  ## do your checks
+  EXISTS=$(echo "select contact_group_id from contact_groups where contact_group_id='$CONTACT_GROUP_ID';" |sql_query)
+  [[ -z $EXISTS ]] && {
+    ERROR="$ERROR <br> That Contact does not exist"
+  } || {
+    [[ -z $NEW_NAME ]] && ERROR="$ERROR<br>A name is required"
+    [[ -z $NEW_BUILD_NAME ]] && ERROR="$ERROR<br>A nagios name is required"
+    [[ ${#NEW_NAME} -gt 64 ]] && ERROR="$ERROR<br>That name is too long. Please pick something shorter"
+    [[ ${#NEW_BUILD_NAME} -gt 64 ]] && ERROR="$ERROR<br>That nagios name is too long. Please pick something shorter"
+    [[ ${#NEW_NAME} -lt 2 ]] && ERROR="$ERROR<br>That name is too short. Please pick something longer"
+    [[ ${#NEW_BUILD_NAME} -lt 2 ]] && ERROR="$ERROR<br>That nagios name is too short. Please pick something longer"
+    [[ -z $ERROR ]] && {
+	UPDATE="name='$NEW_NAME'|build_name='$NEW_BUILD_NAME'"
+    }
+    
+    [[ -n $ADD_OPTION ]] && {
+      case $ADD_OPTION in
+        alias) UPDATE="$UPDATE|alias='_'" ;;
+        members) UPDATE="$UPDATE|members='0'" ;;
+        groups) UPDATE="$UPDATE|contact_groups='0'" ;;
+      esac
+    }
+    [[ -n $RM_OPTION ]] && {
+      case $RM_OPTION in
+        alias) UPDATE="$UPDATE|alias=NULL";unset NEW_ALIAS ;;
+        members) UPDATE="$UPDATE|members=NULL";unset NEW_GROUP_MEMBER ;;
+        groups) UPDATE="$UPDATE|contact_groups=NULL";unset NEW_CONTACT_GROUP ;;
+      esac
+    }
+    [[ -n $NEW_ALIAS ]] && {
+      [[ ${#NEW_ALIAS} -gt 64 ]] && ERROR="$ERROR<br>That alias is too long. Please pick something shorter"
+      [[ ! -z "$(echo "${NEW_ALIAS}" | tr -d "[ A-Za-z0-9+_.\-]")" ]] && ERROR="$ERROR <br> Invalid charcters in the alias"
+      [[ -z $ERROR ]] && {
+        UPDATE="$UPDATE|alias='$NEW_ALIAS'"
+      }
+    }
+    [[ -n $NEW_MEMBER ]] && {
+      [[ ! -z "$(echo "${NEW_MEMBER}" | tr -d "[ A-Za-z0-9+_.\-]")" ]] && ERROR="$ERROR <br> Invalid member."
+      EXISTS=$(echo "select contact_id from contacts where name='$NEW_MEMBER';" |sql_query)
+      [[ -z $EXISTS ]] && {
+	ERROR="$ERROR <br> That Contact does not exist"
+      } || {
+        read CURR_MEMBERS _ <<< $(echo "select contact_group_id from contact_groups where name='$NEW_MEMBER';" |sql_query)
+	[[ $CURR_MEMBERS == 0 ]] && UPDATE="$UPDATE|members='$NEW_MEMBER'" || UPDATE="$UPDATE|members='$CURR_MEMBERS,$NEW_MEMBER'"
+      }
+    }
+    [[ -n $NEW_GROUP_MEMBER ]] && {
+      [[ ! -z "$(echo "${NEW_GROUP_MEMBER}" | tr -d "[ A-Za-z0-9+_.\-]")" ]] && ERROR="$ERROR <br> Invalid member group"
+      NEW_CONTACT_ID=$(echo "select contact_id from contacts where name='$NEW_GROUP_MEMBER';" |sql_query)
+      [[ -z $NEW_CONTACT_ID ]] && {
+	ERROR="$ERROR <br> That Contact does not exist"
+      } || {
+        read CURR_GROUP_MEMBERS _ <<< $(echo "select members from contact_groups where contact_group_id='$CONTACT_GROUP_ID';" |sql_query)
+	for X in $(echo $CURR_GROUP_MEMBERS|tr "," " "); do [[ $NEW_CONTACT_ID == $X ]] && ERROR="$ERROR <br> That contact is already a member of this group" ; done
+      }
+      [[ -z $ERROR ]] && {
+        [[ $CURR_GROUP_MEMBERS == 0 || -z $CURR_GROUP_MEMBERS ]] && UPDATE="$UPDATE|members='$NEW_CONTACT_ID'" || UPDATE="$UPDATE|members='$CURR_GROUP_MEMBERS,$NEW_CONTACT_ID'"
+      }
+    }
+    [[ -n $DEL_GROUP_MEMBER ]] && {
+    read CGM _ <<< $(echo "select members from contact_groups where contact_group_id='$CONTACT_GROUP_ID';" |sql_query)
+    for DGM in $(echo $DEL_GROUP_MEMBER|tr "|" " "); do
+      [[ ! $DGM == $CGM ]] && CGG=0
+      for X in $(echo $CGM|tr "," " "); do [[ ! $DGM == $X ]] && { [[ -z $NEW_CGM ]] && NEW_CGM="$X" || NEW_CGM="$NEW_CGM,$X"; }; done
+      CGM=$NEW_CGM; unset NEW_CGM
+    done
+    [[ -z $CGM ]] && CGM=0
+    UPDATE="$UPDATE|members='$CGM'"
+    }
+
+    alter_contact_group $(echo "select contact_groups from contact_groups where contact_group_id='$CONTACT_GROUP_ID';" | sql_query)
+  }
+  [[ -z $ERROR ]] && {
+    UPDATE_SQL=$(echo $UPDATE | sed 's/^|*//;s/|*$//;s/|/,/g')
+    #echo "update contact_groups set $UPDATE_SQL where contact_group_id='$CONTACT_GROUP_ID';"
+    echo "update contact_groups set $UPDATE_SQL where contact_group_id='$CONTACT_GROUP_ID';" | sql_update
+  }
+
+  DO=CONTACT_GROUP
+}
+
+
+[[ $DO == CONTACT_GROUP ]] && {
+  get_contacts
+  get_contact_groups
+
+  IFS="|" read NAME BUILD_NAME ALIAS MEMBERS GROUP_MEMBERS _ <<< "$(echo "select name,build_name,alias,members,contact_groups from contact_groups where contact_group_id='$CONTACT_GROUP_ID';" | sql_query)"
+
+	cat <<- EOF
+	  <p id=error>$ERROR</p>
+	  <form method=POST action=/cgi-bin/auth.cgi>
+	  <center><b>$BUILD_NAME</b></center>
+	  <br>
+	  Group Name: <input type=text name="NEW_NAME" value="$NAME" size="100"><br>
+	  Nagios Group Name: <input type=text name="NEW_BUILD_NAME" value="$BUILD_NAME" size="100"><br>
+	EOF
+
+          [[ -n $ALIAS ]] && {
+		[[ $ALIAS == "_" ]] && unset ALIAS
+            echo "<br>Alias: <input type=text name=\"NEW_ALIAS\" value=\"$ALIAS\" size=\"64\"><br>"
+            RM_OPTIONS_LIST="$RM_OPTIONS_LIST|alias"
+          } || ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|alias"
+
+          [[ -n $MEMBERS ]] && {
+	    [[ $MEMBERS == "0" ]] && unset MEMBERS
+            echo "<br>Members (check to remove):<br>"
+	      [[ -n $MEMBERS ]] && {
+		while IFS="|" read M _; do
+		  echo "<input type=checkbox name=DEL_GROUP_MEMBER value=$M>${CT[M]}<BR>"  
+		done< <(echo "select contact_id from contacts where $(echo $MEMBERS|sed 's/^/contact_id='"'"'/;s/,/'"'"' or contact_id='"'"'/g;s/$/'"'"'/');" |sql_query)
+	      }
+            echo "<br>&nbsp;&nbsp;&nbsp; Add a Member: <input type=text name=\"NEW_GROUP_MEMBER\" value=\"\" size=\"32\" list=\"CONTACTS\"><br>"
+	    echo "<datalist id=\"CONTACTS\">"
+	    for i in ${!CT[*]} ; do echo "    <option label=\"${CT[$i]}\">${CT[$i]}</option>";done
+	    echo "</datalist>"
+            RM_OPTIONS_LIST="$RM_OPTIONS_LIST|members"
+          } || ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|members"
+
+          [[ -n $GROUP_MEMBERS ]] && {
+	    [[ $GROUPS == "0" ]] && unset GROUPS
+	    show_contact_groups $GROUP_MEMBERS
+            RM_OPTIONS_LIST="$RM_OPTIONS_LIST|groups"
+          } || ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|groups"
+
+	add_remove_options
+
+	cat <<- EOF
+	  <br><br>
+	  <input type=hidden name=SCR value=$SCR>
+	  <input type=hidden name=DO value=UPDATE_GROUP>
+	  <input type=hidden name=CONTACT_GROUP_ID value=$CONTACT_GROUP_ID>
+	  <input type=submit value="Update This Contact Group">
+	  </form><br>
+	  <form method=POST action=/cgi-bin/auth.cgi>
+	  <input type=hidden name=SCR value=$SCR>
+	  <input type=hidden name=DO value=DELETE_GROUP>
+	  <input type=hidden name=CONTACT_GROUP_ID value=$CONTACT_GROUP_ID>
+	  <input type=submit value="Delete This Contact Group">
+	  </form><br>
+	EOF
+
+}

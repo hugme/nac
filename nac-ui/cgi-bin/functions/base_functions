@@ -1,0 +1,158 @@
+##########################################
+## Get the information about the user
+
+get_profile() {
+	GET_USER_PROFILE=$1
+	unset FIELD
+	while read FIELD ; do
+		case $FIELD in
+			FIRSTNAME=*) RU_FIRSTNAME=${FIELD#*=};;
+			LASTNAME=*) RU_LASTNAME=${FIELD#*=};;
+			EMAIL=*) RU_EMAIL=${FIELD#*=};;
+			ADDRESS=*) RU_ADDRESS=${FIELD#*=};;
+			CITY=*) RU_CITY=${FIELD#*=};;
+			STATE=*) RU_STATE=${FIELD#*=};;
+			ZIP=*) RU_ZIP=${FIELD#*=};;
+			PHONE1=*) RU_PHONE1=${FIELD#*=};;
+			PHONE2=*) RU_PHONE2=${FIELD#*=};;
+			PHONE3=*) RU_PHONE3=${FIELD#*=};;
+			BIRTHDAY=*) RU_BIRTHDAY=${FIELD#*=};;
+			SHIRTSIZE=*) RU_SHIRTSIZE=${FIELD#*=};;
+			EMC_NAME=*) EMC_NAME=${FIELD#*=};;
+			EMC_PHONE1=*) EMC_PHONE1=${FIELD#*=};;
+			EMC_PHONE2=*) EMC_PHONE2=${FIELD#*=};;
+		esac
+	done < $PROFILE_DIR/$GET_USER_PROFILE/profile
+}
+
+################################################
+## Get the badge Information
+
+get_badge() {
+	GET_BADGE_PROFILE=$1
+	unset $FIELD
+	while read FIELD ; do
+		case $FIELD in
+			BADGE_NUMBER=*) BADGE_NUMBER=${FIELD#*=};;
+			BADGE_NAME=*) BADGE_NAME=${FIELD#*=};;
+			AGE_VERIFIED_BY=*) AGE_VERIFIED_BY=${FIELD#*=};;
+			BADGE_COST=*) BADGE_COST=${FIELD#*=};;
+			BADGE_TYPE=*) BADGE_TYPE=${FIELD#*=};;
+			CHECKIN_TIME=*) CHECKIN_TIME=${FIELD#*=};;
+			USER_AGREEMENT=*) USER_AGREEMENT=${FIELD#*=};;
+			USER_AGREEMENT_IP=*) USER_AGREEMENT_IP=${FIELD#*=};;
+			USER_AGREEMENT_TIME=*) USER_AGREEMENT_TIME=${FIELD#*=};;
+			USER_AGREEMENT_HOSTNAME=*) USER_AGREEMENT_HOSTNAME=${FIELD#*=};;
+			BADGE_TYPE=*) BADGE_TYPE=${FIELD#*=};;
+			R_METHOD=*) R_METHOD=${FIELD#*=};;
+			R_TYPE=*) R_TYPE=${FIELD#*=};;
+		esac
+	done < $PROFILE_DIR/$GET_BADGE_PROFILE/$CURR_YEAR.profile
+	}
+
+#################################################
+## Show the profile information
+
+show_profile() {
+use_date_functions
+cat << EOF
+	<center><font size=+1>$RU_FIRSTNAME $RU_LASTNAME</font><br><br></center>
+	<dull>Name:</dull> <n2>$RU_FIRSTNAME $RU_LASTNAME</n2><br>
+	<dull>Birthday:</dull> <n2>$RU_BIRTHDAY &nbsp &nbsp &nbsp &nbsp &nbsp  $(show_age $RU_BIRTHDAY) Years Old   </n2> <br>
+	<dull>Address:</dull> <n2>$RU_ADDRESS</n2><br>
+	&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp
+	<n2>$RU_CITY, $RU_STATE $RU_ZIP</n2> <br>
+	<dull>Home:</dull> <n2>$RU_PHONE1</n2> &nbsp&nbsp&nbsp&nbsp
+	<dull>Cell:</dull> <n2>$RU_PHONE2</n2> &nbsp&nbsp&nbsp&nbsp
+	<dull>Work:</dull> <n2>$RU_PHONE3</n2> &nbsp&nbsp&nbsp&nbsp
+	<br>
+	<dull>Email:</dull>  <n2>$RU_EMAIL<br>
+	<dull>Shirt Size:</dull> <n2>$RU_SHIRTSIZE <br>
+	<br><br>
+	</b></font>
+EOF
+
+[ "$2" != "SHORT" ] && {
+cat << EOF
+	<!-- ### Show Emergency contact information ### -->
+	<font size=+1>Emergency Contact</font><br><br>
+	<dull>Emergency Contact:</dull> <n2>$EMC_NAME</n2><BR>
+	<dull>Phone 1:</dull> <n2>$EMC_PHONE1</n2><BR>
+	<dull>Phone 2:</dull> <n2>$EMC_PHONE2</n2><br>
+	<br><br>
+	</b></font>
+EOF
+	}
+}
+
+###################################################
+## show the badge information
+
+show_badge() {
+cat << EOF
+	<center><font size=+1>$CURR_YEAR Badge information for $RU_FIRSTNAME $RU_LASTNAME</font></center><br><br>
+	<dull>Badge Number:</dull> <n2>$BADGE_NUMBER</n2><br>
+	<dull>Badge Type:</dull> <n2>$BADGE_TYPE</n2><br>
+	<dull>Badge Name:</dull> <n2>$BADGE_NAME</n2><br>
+	<dull>Check-in Time:</dull> <n2>$(norm_date $CHECKIN_TIME || echo "$CHECKIN_TIME")</n2><br>
+EOF
+	}
+
+#################################
+##  the user can ok the user agreement here
+
+user_agreement() {
+	AGREE_USER=$1
+	get_badge $AGREE_USER
+
+[ -z "$USER_AGREEMENT_IP" -o -z "$USER_AGREEMENT_TIME" ] && {
+cat << EOF
+	<center><n1>
+	You have not accepted the user agreemtne for $CURR_YEAR.<br>
+	Please read over the agreement<br>
+	If you agree please check on the "I AGREE" button at the bottom of the page.<br><br>
+	</center></n1>
+EOF
+} || {
+cat << EOF
+	<center><n1>
+	You have already accepted the user agreement for $CURR_YEAR.<br><br>
+	Your acceptance was recorded on $(norm_date $USER_AGREEMENT_TIME)<br>
+	From the computer at $USER_AGREEMENT_HOSTNAME<br>
+	With the address $USER_AGREEMENT_IP<br><br><br>
+	</center></n1>
+EOF
+}
+
+	sed 's/$/\<br\>/' $USER_INCLUDES/user_agreement.html
+
+[ -z "$USER_AGREEMENT_IP" -o -z "$USER_AGREEMENT_TIME" ] && {
+cat << EOF
+	        <br><br>
+		<center>
+			Click here once you have read, understand and are willing to take responsiblity for upholding the user agreement.<br><br>
+		<form method=post action=/cgi-bin/attendees/members_only.cgi>
+		<input type="submit" value="Accept the user agreement for $CURR_YEAR">
+		<input type=hidden name=USER_AGREEMENT value=AGREE>       
+		<input type=hidden name=USER_AGREEMENT_IP value=$REMOTE_ADDR>       
+		<input type=hidden name=USER_AGREEMENT_TIME value=$(date +%s)>       
+		<input type=hidden name=USER_AGREEMENT_HOSTNAME value=$REMOTE_HOST>       
+		<input type=hidden name=PAGE value=0>       
+		</form><br><br>
+		<a href="/cgi-bin/login_error.cgi?ERROR=LOGOUT">Click here if you do not accept the agreement</a>
+		</center>
+
+EOF
+	}
+}
+
+sql_query() {
+	read DATA
+	#echo "$DATA" | /usr/local/bin/mysql -s -u $DB_USER --password=$DB_PASS -h $DB_HOST $DB_NAME | sed 's/	/\|/g;s/|NULL *|/||/g'
+	echo "$DATA" | /usr/bin/psql -qt -p $DB_PORT -U $DB_USER -h $DB_HOST $DB_NAME -F "|" | sed 's/^ *//;s/| */|/g;s/ *|/|/g;s/ *$//;/^$/d'
+}
+sql_update() {
+	read DATA
+	#echo "$DATA" | /usr/local/bin/mysql -s -u $DB_USER --password=$DB_PASS -h $DB_HOST $DB_NAME
+	echo "$DATA" | /usr/bin/psql -qt -p $DB_PORT -U $DB_USER -h $DB_HOST $DB_NAME
+}

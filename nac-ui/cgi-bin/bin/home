@@ -1,0 +1,134 @@
+#!/bin/bash
+
+# set some variables
+. $(cat varset)
+
+use_admin_functions
+use_base_functions
+use_bust_functions
+use_date_functions
+
+for X in  ${QUERY_STRING//&/ }; do
+        case $X in
+                SCR=*) SCR=${X#*=};;
+                DO=*) DO=${X#*=};;
+                ID=*) ID=${X#*=};;
+                NEW_LOCATION=*) NEW_LOCATION=$(bustit ${X#*=});;
+                NEW_STATUS=*) NEW_STATUS=$(bustit ${X#*=});;
+        esac
+done
+
+# Get all the servers and load them into arrays
+while IFS="|" read NUM NAME  _ ; do
+  SERVER_NAME[NUM]="$NAME"
+done< <(echo "select server_id,hostname from servers;"|sql_query)
+######################################################################################
+######## Make Changes
+######################################################################################
+
+[[ $DO == alter_ticket ]] && {
+  [[ -n $NEW_STATUS ]] && echo "update complaint_log set STATUS='$NEW_STATUS' where log_id='$ID';" | sql_update
+  DO=show
+}
+
+######################################################################################
+######## Show the ticket
+######################################################################################
+
+[[ $DO == show ]] && {
+  IFS="|" read TYPE DETAILS CREATE_DATE DESCRIPTION O_1 O_2 STATUS _ <<< "$(echo "select type,details,create_date,description,object_1,object_2,status from complaint_log where log_id='$ID'" | sql_query)"
+	cat <<- EOF
+	<center><b>Complaint $ID</b></center>
+	Type: $TYPE <br>
+	Status: $STATUS<br>
+	Created: $CREATE_DATE<br>
+	Description: $DESCRIPTION<br>
+	<BR><BR>
+	EOF
+	[[ $STATUS != OPEN ]] && {
+	cat <<- EOF
+	<form method=POST action=/cgi-bin/auth.cgi>
+	  <input type=hidden name=DO value=alter_ticket>
+	  <input type=hidden name=SCR value="$SCR">
+	  <input type=hidden name=ID value="$ID">
+	  <input type=hidden name=NEW_STATUS value=OPEN>
+	  <input type=submit value="Open Ticket">
+	</form>
+	EOF
+	}
+	[[ $STATUS != CLOSE ]] && {
+	cat <<- EOF
+	<form method=POST action=/cgi-bin/auth.cgi>
+	  <input type=hidden name=DO value=alter_ticket>
+	  <input type=hidden name=SCR value="$SCR">
+	  <input type=hidden name=ID value=$ID>
+	  <input type=hidden name=NEW_STATUS value=CLOSE>
+	  <input type=submit value="Close Ticket">
+	</form>
+	EOF
+	}
+	[[ $STATUS != LOCK ]] && {
+	cat <<- EOF
+	<form method=POST action=/cgi-bin/auth.cgi>
+	  <input type=hidden name=DO value=alter_ticket>
+	  <input type=hidden name=SCR value="$SCR">
+	  <input type=hidden name=ID value=$ID>
+	  <input type=hidden name=NEW_STATUS value=LOCK>
+	  <input type=submit value="Lock Ticket">
+	</form>
+	EOF
+	}
+  case $TYPE in
+    HOST\ DUPE) echo "delete 1 - delete 2" ;;
+    MCO\ CHANGE) echo "unset mco" ;; 
+    SITE\ CHANGE) echo  "change to site" ;;
+    MONGO\ ADD) echo  "set for Normal " ;;
+    MONGO\ REMOVE) echo  "Depricate" ;;
+    *) echo unknown type;;
+  esac
+  exit 0
+}
+
+######################################################################################
+######## Show all the tickets
+######################################################################################
+
+lnk_srv() {
+  SRV=$1
+  [[ -n $SRV ]] && echo "<a href='/cgi-bin/auth.cgi/?SCR=host_edit&DO=SERVER&SERVER=$SRV'>${SERVER_NAME[SRV]}</a>"
+}
+lnk_stuff() {
+  ERR=$1
+  [[ -n $SRV ]] && echo "<a href='/cgi-bin/auth.cgi/?SCR=$SCR&DO=SHOW&SERVER=$LOG_ID'>Do something</a>"
+}
+
+cat << EOF
+  <h>This is what our system is complaining about</h>
+  <table border=1 cellspacing=0 cellpadding=3>
+  <tr><td>ComplaintID</td><td>Creation Date</td><td>Description</td><td>Object 1</td><td>Object 2</td><td>Status</td><td>Select</td></tr>
+  <form method=POST action=/cgi-bin/auth.cgi>
+EOF
+while IFS="|" read LOG_ID TYPE DETAILS CDATE DESC O_1 O_2 STATUS _ ; do
+
+echo "<tr><td><a href='/cgi-bin/auth.cgi/?SCR=${SCR}&DO=show&ID=$LOG_ID'>$LOG_ID</a></td><td>$CDATE</td><td>$DESC</td>"
+  case $TYPE in
+    HOST\ DUPE) echo "<td>$(lnk_srv $O_1)</td><td>$(lnk_srv $O_2)</td>" ;;
+    MCO\ CHANGE) echo "<td>$(lnk_srv $O_1)</td><td></td>" ;;
+    SITE\ CHANGE) echo "<td>$(lnk_srv $O_1)</td><td></td>" ;;
+    MONGO\ ADD) echo "<td>$(lnk_srv $O_1)</td><td></td>" ;;
+    *) echo "<td>$(lnk_srv $O_1)</td><td>$(lnk_srv $O_2)</td>" ;;
+  esac
+  echo "<td>$STATUS</td><td><input type=checkbox name=ID</td></tr>"
+done< <(echo "select log_id,type,details,create_date,description,object_1,object_2,status from complaint_log where status!='CLOSE';" | sql_query)
+	cat <<- EOF
+	<select name=NEW_STATUS >
+	  <input>CLOSE</input>
+	  <input>OPEN</input>
+	  <input>LOCK</input>
+	</select>
+	<input type=hidden name=DO value=alter_ticket>
+	<input type=hidden name=SCR value="$SCR">
+	</form>
+	EOF
+echo </table>
+

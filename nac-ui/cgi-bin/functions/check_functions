@@ -1,0 +1,58 @@
+
+check_time_period() {
+  PERIOD_NAME="$1"
+  [[ ${#PERIOD_NAME} -gt 32 ]] && PERIOD_ERROR="$PERIOD_ERROR<br>The period name is too long. Please pick something shorter"
+  [[ ! -z "$(echo "${PERIOD_NAME}" | tr -d "[ A-Za-z0-9_.\-]")" ]] && PERIOD_ERROR="$PERIOD_ERROR <br> Invalid charcters in the period"
+  [[ -z $PERIOD_ERROR ]] && {
+    PERIOD_ID=$(echo "select time_periods_id from time_periods where name='$PERIOD_NAME';" | sql_query)
+    [[ -n $PERIOD_ID ]] && {
+      echo $PERIOD_ID
+      exit 0
+    } || {
+      echo "$PERIOD_NAME is not a valid time period"
+      exit 1
+    }
+  } || {
+    echo "$PERIOD_ERROR"
+    exit 1
+  }
+}
+
+check_set_service_note_options() {
+  DB_CELL_NAME="$1"  
+    unset OP NEW_NO
+    for OP in ${NEW_SERVICE_NOTE_OPTIONS[*]} ; do
+      case $OP in
+        w) NEW_NO="$NEW_NO w";;
+        u) NEW_NO="$NEW_NO u";;
+        c) NEW_NO="$NEW_NO c";;
+        r) NEW_NO="$NEW_NO r";;
+        f) NEW_NO="$NEW_NO f";;
+        s) NEW_NO="$NEW_NO s";;
+        *) ERROR="$ERROR<br>Your Note Options are invalid.";;
+      esac
+    done
+   [[ -z $ERROR ]] && UPDATE="$UPDATE|$DB_CELL_NAME='$(echo $NEW_NO | sed 's/^ *//;s/ *$//;s/ /,/g')'"
+}
+
+
+check_set_host_note_options() {
+  DB_CELL_NAME="$1"   
+    unset OP NEW_NO
+    for OP in ${NEW_HOST_NOTE_OPTIONS[*]} ; do
+      case $OP in
+        d) NEW_NO="$NEW_NO d";;
+        u) NEW_NO="$NEW_NO u";;
+        r) NEW_NO="$NEW_NO r";;
+        f) NEW_NO="$NEW_NO f";;
+        s) NEW_NO="$NEW_NO s";;
+        *) ERROR="$ERROR<br>Your Note Options are invalid.";;
+      esac
+	true
+    done
+    [[ -z $ERROR ]] && UPDATE="$UPDATE|$DB_CELL_NAME='$(echo $NEW_NO | sed 's/^ *//;s/ *$//;s/ /,/g')'"
+}
+
+
+
+

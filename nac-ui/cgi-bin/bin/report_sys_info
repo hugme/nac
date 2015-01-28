@@ -1,0 +1,208 @@
+#!/bin/bash
+
+. $(cat varset)
+
+
+use_admin_functions
+use_base_functions
+use_bust_functions
+use_date_functions
+use_form_functions
+i=0
+for X in  ${QUERY_STRING//&/ }; do
+ case $X in
+  SCR=*) SCR=${X#*=};;
+  DO=*) DO=${X#*=};;
+  DEL=*) DEL=${X#*=};;
+  OBJ=*) OBJ=${X#*=};;
+  ATT=*) ATT[i]="${X#*=}"
+         i=$(($i+1));;
+ esac
+done
+
+case $DEL in
+ TAB) D='&#9;';;
+ PIPE) D='|';;
+ SIMI) D=';';;
+ COMMA) D=',';;
+ *) D=',';DEL="COMMA";;
+esac
+
+[[ -z $OBJ ]] && OBJ=ROLE
+
+echo "Make sure you create your example before you download the file"
+
+cat << EOF
+ <br><br>
+ <style>
+ div.scroll
+ {
+ background-color:#EEE;
+ width:1000px;
+ height:500px;
+ overflow:scroll;
+ }
+ </style>
+ <form method=POST action=/cgi-bin/auth.cgi>
+  <input type=radio name=OBJ value="ROLE" $([[ $OBJ == ROLE ]] && echo "checked")>Role:
+    <dir>
+    <input type=checkbox value=role_name name=ATT $(for E in ${ATT[@]} ; do [[ $E == role_name ]] && echo checked ; done)>Name
+    <input type=checkbox value=role_services name=ATT $(for E in ${ATT[@]} ; do [[ $E == role_services ]] && echo checked ; done)>Services
+    <input type=checkbox value=role_host name=ATT $(for E in ${ATT[@]} ; do [[ $E == role_host ]] && echo checked ; done)>Hosts
+    <input type=checkbox value=role_esc name=ATT $(for E in ${ATT[@]} ; do [[ $E == role_esc ]] && echo checked ; done)>escalations
+    <input type=checkbox value=role_dep name=ATT $(for E in ${ATT[@]} ; do [[ $E == role_dep ]] && echo checked ; done)>Dependancies
+    </dir>
+  <input type=radio name=OBJ value="SERVICE" $([[ $OBJ == SERVICE ]] && echo "checked")>Service:
+    <dir>
+    <input type=checkbox value=srv_name name=ATT $(for E in ${ATT[@]} ; do [[ $E == srv_name ]] && echo checked ; done)>Name
+    <input type=checkbox value=srv_hosts name=ATT $(for E in ${ATT[@]} ; do [[ $E == srv_hosts ]] && echo checked ; done)>Hosts
+    <input type=checkbox value=srv_roles name=ATT $(for E in ${ATT[@]} ; do [[ $E == srv_roles ]] && echo checked ; done)>Roles
+    <input type=checkbox value=srv_desc name=ATT $(for E in ${ATT[@]} ; do [[ $E == srv_desc ]] && echo checked ; done)>Description
+    <input type=checkbox value=srv_temp name=ATT $(for E in ${ATT[@]} ; do [[ $E == srv_temp ]] && echo checked ; done)>Templates
+     <br>
+    <input type=checkbox value=srv_check_command name=ATT $(for E in ${ATT[@]} ; do [[ $E == srv_check_command ]] && echo checked ; done)>Check Command
+    <input type=checkbox value=srv_build_name name=ATT $(for E in ${ATT[@]} ; do [[ $E == srv_build_name ]] && echo checked ; done)>Build Name
+    <input type=checkbox value=srv_url name=ATT $(for E in ${ATT[@]} ; do [[ $E == srv_url ]] && echo checked ; done)>URL
+    <input type=checkbox value=srv_notes name=ATT $(for E in ${ATT[@]} ; do [[ $E == srv_notes ]] && echo checked ; done)>Notes
+    <input type=checkbox value=srv_loc name=ATT $(for E in ${ATT[@]} ; do [[ $E == srv_loc ]] && echo checked ; done)>Location
+    </dir>
+   <input type=radio name=OBJ value="HOST" $([[ $OBJ == HOST ]] && echo "checked")>Host:<br>
+    <dir>
+    <input type=checkbox value=hst_name name=ATT $(for E in ${ATT[@]} ; do [[ $E == hst_name ]] && echo checked ; done)>Name
+    <input type=checkbox value=hst_role name=ATT $(for E in ${ATT[@]} ; do [[ $E == hst_role ]] && echo checked ; done)>Role
+    <input type=checkbox value=hst_facts name=ATT $(for E in ${ATT[@]} ; do [[ $E == hst_facts ]] && echo checked ; done)>Facts
+    </dir>
+   Delimiter: 
+   Pipe: <input type="radio" name="DEL" value="PIPE" $([[ $DEL == PIPE ]] && echo "checked=checked")> &nbsp; &nbsp;
+   Tab: <input type="radio" name="DEL" value="TAB" $([[ $DEL == TAB ]] && echo "checked=checked")> &nbsp; &nbsp;
+   Simicolon: <input type="radio" name="DEL" value="SIMI" $([[ $DEL == SIMI ]] && echo "checked=checked")> &nbsp; &nbsp;
+   comma: <input type="radio" name="DEL" value="COMMA" $([[ $DEL == COMMA ]] && echo "checked=checked")>
+   <br>
+   <input type=hidden name=SCR value=$SCR>
+   <input type=submit name=DO value="Preview">
+   <a href=/cgi-bin/download.cgi?$QUERY_STRING>Download this report</a> (make sure you preview first!)
+ </form>
+EOF
+ echo "<div class=\"scroll\">"
+  curl "http://localhost/cgi-bin/download.cgi?HEAD=NO&KEY=kS21xpg2xLx1r9sOXUiNcXCXFJIOqAWA&$QUERY_STRING" 2>/dev/null
+  #echo "curl \"http://localhost/cgi-bin/download.cgi?HEAD=NO&KEY=kS21xpg2xLx1r9sOXUiNcXCXFJIOqAWA&$QUERY_STRING\""
+ echo "</div>"
+exit 0
+
+
+
+[[ $DO == FORM ]] && {
+ echo "<div class=\"scroll\">"
+ case $OBJ in
+  ##########################################################################
+  #### First lets work on the role
+  ##########################################################################
+  ROLE)
+   TABLE="role R"
+   i=0
+   for E in ${ATT[@]} ; do 
+    [[ $E == role_name ]] && {
+     CALL[i]=NAME
+     COL[i]="R.name"
+     HEAD[i++]="Role Name${D}"
+     }
+    [[ $E == role_services ]] && {
+     CALL[i]=SERVICES
+     while IFS="|" read ID NAME _ ; do
+      SERVICE_NAME[ID]=$NAME
+     done< <(echo "select service_id,name from services;" | sql_query)
+     COL[i]="R.services"
+     HEAD[i++]="Role Services${D}"
+     }
+    [[ $E == role_host ]] && {
+     CALL[i]=HOST
+     while IFS="|" read S_ID ONE_HOST ONE_ROLE _ ; do
+      HOST_NAME[S_ID]=$ONE_HOST
+      HOST_ROLE[S_ID]=$ONE_ROLE
+     done< <(echo "select server_id,hostname,role from servers;" | sql_query)
+     COL[i]="R.role_id"
+     HEAD[i++]="Host Template${D}"
+     }
+    [[ $E == role_esc ]] && {
+     CALL[i]=ESC
+     COL[i]="R.escalations"
+     HEAD[i++]="Escalations${D}"
+     }
+    [[ $E == role_dep ]] && {
+     CALL[i]=DEP
+     COL[i]="R.deps"
+     HEAD[i++]="Dependancies${D}"
+     }
+   done
+
+   echo "${HEAD[@]}<br>"
+   while read DATA ; do
+    IFS="|" EDATA=($DATA)
+     for i in ${!COL[@]} ; do
+      [[ $i != 0 ]] && printf "${D}"
+      case ${CALL[i]} in
+       SERVICES) printf "\""
+        IFS=" "; for X in ${EDATA[i]}; do printf "${SERVICE_NAME[X]} " ; done
+        printf "\"";;
+       HOST) printf "\""
+        for THIS_HOST in ${!HOST_ROLE[@]}; do [[ ${HOST_ROLE[THIS_HOST]} == ${EDATA[i]} ]] && printf "${HOST_NAME[THIS_HOST]} " ; done
+        printf "\"";;
+       *) printf "\"${EDATA[i]}\"" ;;
+      esac
+     done
+     echo "<br>"
+   done< <( echo "select $(echo ${COL[@]}|tr " " ,) from $TABLE;" | sql_query )
+   #echo "select $(echo ${COL[@]}|tr " " ,) from $TABLE;"
+  ;;
+
+  ##########################################################################
+  #### Now the services
+  ##########################################################################
+  SERVICE)
+   echo "Service ID${D}Service Name${D}Service Description${D}Templates${D}Check Command${D}Name to build${D}Service Groups${D}Notes${D}URL${D}Internal Notes${D}Location<br>"
+   while IFS="|" read SRV_ID SRV_NAME SRV_DESC SRV_USE SRV_CHECK SRV_BUILD SRV_GROUPS SRV_NOTES SRV_URL SRV_INTNOTES SRV_LOCATION _ ; do
+    echo "\"$SRV_ID\"${D}\"$SRV_NAME\"${D}\"$SRV_DESC\"${D}\"$SRV_USE\"${D}\"$SRV_CHECK\"${D}\"$SRV_BUILD\"${D}\"$SRV_GROUPS\"${D}\"$SRV_NOTES\"${D}\"$SRV_URL\"${D}\"$SRV_INTNOTES\"${D}\"$SRV_LOCATION\"<br>"
+   done< <(echo "select service_id,name,description,use,check_command,build_name,service_groups,nag_notes,notes_url,int_notes,location from services;" | sql_query)  
+  ;;
+
+  ##########################################################################
+  #### Finally the Hosts
+  ##########################################################################
+  HOST)
+   TABLE="servers V"
+   i=0
+   for E in ${ATT[@]} ; do 
+    [[ $E == hst_name ]] && {
+     CALL[i]=NAME
+     COL[i]="V.hostname"
+     HEAD[i++]="Hostname${D}"
+     }
+    [[ $E == hst_role ]] && {
+     CALL[i]=ROLE
+     COL[i]="R.name"
+     HEAD[i++]="Role${D}"
+     TABLE="$TABLE, role R"
+     [[ -z $WHERE ]] && WHERE="R.role_id=V.role" || WHERE="$WHERE and R.role_id=V.role"
+     }
+   done
+   [[ -n $WHERE ]] && WHERE="where $WHERE"
+
+   echo "${HEAD[@]}<br>"
+   while read DATA ; do
+    IFS="|" EDATA=($DATA)
+    for i in ${!COL[@]} ; do
+     [[ $i != 0 ]] && printf "${D}"
+     case ${CALL[i]} in
+      *) printf "\"${EDATA[i]}\"" ;;
+     esac
+    done
+    echo "<br>"
+   done< <( echo "select $(echo ${COL[@]}|tr " " ,) from $TABLE $WHERE;" | sql_query )
+   echo "select $(echo ${COL[@]}|tr " " ,) from $TABLE $WHERE;"
+  ;;
+ esac
+
+ echo "</div>"
+ echo "$HEAD<br>"
+}
+

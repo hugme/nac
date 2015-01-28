@@ -1,0 +1,413 @@
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SET check_function_bodies = false;
+SET client_min_messages = warning;
+CREATE EXTENSION IF NOT EXISTS plpgsql WITH SCHEMA pg_catalog;
+COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
+SET search_path = public, pg_catalog;
+SET default_tablespace = '';
+SET default_with_oids = false;
+CREATE TABLE commands (
+    command_id integer NOT NULL,
+    name character varying(64) NOT NULL,
+    command character varying(1024)
+);
+ALTER TABLE public.commands OWNER TO nac;
+CREATE SEQUENCE commands_command_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+ALTER TABLE public.commands_command_id_seq OWNER TO nac;
+ALTER SEQUENCE commands_command_id_seq OWNED BY commands.command_id;
+CREATE TABLE complaint_log (
+    log_id bigint NOT NULL,
+    type character varying(32),
+    importance integer,
+    details character varying(1024),
+    description character varying(128),
+    command_1 character varying(1024),
+    command_2 character varying(1024),
+    command_3 character varying(1024),
+    command_4 character varying(1024),
+    command_1_description character varying(1024),
+    command_2_description character varying(1024),
+    command_3_description character varying(1024),
+    command_4_description character varying(1024),
+    object_1 character varying(128),
+    object_2 character varying(128),
+    object_3 character varying(128),
+    object_4 character varying(128),
+    create_date timestamp without time zone,
+    status character varying(16)
+);
+ALTER TABLE public.complaint_log OWNER TO nac;
+CREATE SEQUENCE complaint_log_log_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+ALTER TABLE public.complaint_log_log_id_seq OWNER TO nac;
+ALTER SEQUENCE complaint_log_log_id_seq OWNED BY complaint_log.log_id;
+CREATE TABLE contact_groups (
+    contact_group_id integer NOT NULL,
+    name character varying(128) NOT NULL,
+    build_name character varying(128) NOT NULL,
+    alias character varying(128),
+    members character varying(256),
+    contact_groups character varying(256)
+);
+ALTER TABLE public.contact_groups OWNER TO nac;
+CREATE SEQUENCE contact_groups_contact_group_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+ALTER TABLE public.contact_groups_contact_group_id_seq OWNER TO nac;
+ALTER SEQUENCE contact_groups_contact_group_id_seq OWNED BY contact_groups.contact_group_id;
+CREATE TABLE contacts (
+    contact_id integer NOT NULL,
+    name character varying(128) NOT NULL,
+    build_name character varying(128) NOT NULL,
+    alias character varying(128),
+    service_notification_period integer,
+    host_notification_period integer,
+    service_notification_options character varying(128),
+    host_notification_options character varying(128),
+    service_notification_commands character varying(128),
+    host_notification_commands character varying(128),
+    email character varying(128),
+    pager character varying(128)
+);
+ALTER TABLE public.contacts OWNER TO nac;
+CREATE SEQUENCE contacts_contact_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+ALTER TABLE public.contacts_contact_id_seq OWNER TO nac;
+ALTER SEQUENCE contacts_contact_id_seq OWNED BY contacts.contact_id;
+CREATE TABLE deprecated_servers (
+    server_id integer NOT NULL,
+    hostname character varying(128) NOT NULL,
+    location character varying(128),
+    role integer NOT NULL,
+    file character varying(64),
+    type character varying(64),
+    puppet character varying(16),
+    mco character varying(16),
+    file_systems character varying(512),
+    nfs_file_systems character varying(512),
+    nag_address character varying(128),
+    ip_addresses character varying(128),
+    interfaces character varying(128),
+    barcode integer,
+    alias character varying(128),
+    status character varying(64) NOT NULL,
+    nag_location character varying(128)
+);
+ALTER TABLE public.deprecated_servers OWNER TO nac;
+CREATE SEQUENCE depricated_servers_server_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+ALTER TABLE public.depricated_servers_server_id_seq OWNER TO nac;
+ALTER SEQUENCE depricated_servers_server_id_seq OWNED BY deprecated_servers.server_id;
+CREATE TABLE deps (
+    dep_id integer NOT NULL,
+    host_service_id integer NOT NULL,
+    dependent_server_id integer NOT NULL,
+    dependent_service_id integer NOT NULL,
+    notification_failure_criteria character varying(32) NOT NULL,
+    name character varying(512) NOT NULL
+);
+ALTER TABLE public.deps OWNER TO nac;
+CREATE SEQUENCE deps_dep_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+ALTER TABLE public.deps_dep_id_seq OWNER TO nac;
+ALTER SEQUENCE deps_dep_id_seq OWNED BY deps.dep_id;
+CREATE TABLE escalations (
+    esc_id integer NOT NULL,
+    service_id integer NOT NULL,
+    name character varying(512) NOT NULL,
+    first_note character varying(256),
+    second_note character varying(256),
+    note_interval character varying(256),
+    esc_period character varying(256),
+    esc_options character varying(256),
+    int_notes character varying(2048),
+    contact character varying(256),
+    contact_groups character varying(256)
+);
+ALTER TABLE public.escalations OWNER TO nac;
+CREATE SEQUENCE escalations_esc_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+ALTER TABLE public.escalations_esc_id_seq OWNER TO nac;
+ALTER SEQUENCE escalations_esc_id_seq OWNED BY escalations.esc_id;
+CREATE TABLE facts (
+    server_id integer NOT NULL,
+    perm_role character varying(64),
+    perm_interfaces character varying(128),
+    perm_virtual character varying(64),
+    perm_site character varying(64),
+    user_content character varying(64)
+);
+ALTER TABLE public.facts OWNER TO nac;
+CREATE SEQUENCE facts_server_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+ALTER TABLE public.facts_server_id_seq OWNER TO nac;
+ALTER SEQUENCE facts_server_id_seq OWNED BY facts.server_id;
+CREATE TABLE host_template (
+    host_template_id integer NOT NULL,
+    name character varying(64) NOT NULL,
+    notifications_enabled integer,
+    event_handler_enabled integer,
+    flap_detection_enabled integer,
+    failure_prediction_enabled integer,
+    process_perf_data integer,
+    retain_status_information integer,
+    retain_nonstatus_information integer,
+    notification_period character varying(32),
+    register integer,
+    check_command character varying(64),
+    max_check_attempts integer,
+    notification_interval integer,
+    notification_options character varying(32),
+    contact_groups character varying(256),
+    check_period character varying(32)
+);
+ALTER TABLE public.host_template OWNER TO nac;
+CREATE SEQUENCE host_template_host_template_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+ALTER TABLE public.host_template_host_template_id_seq OWNER TO nac;
+ALTER SEQUENCE host_template_host_template_id_seq OWNED BY host_template.host_template_id;
+CREATE TABLE role (
+    role_id integer NOT NULL,
+    name character varying(64),
+    services character varying(512),
+    host_template integer,
+    escalations character varying(512),
+    deps character varying(512)
+);
+ALTER TABLE public.role OWNER TO nac;
+CREATE SEQUENCE role_role_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+ALTER TABLE public.role_role_id_seq OWNER TO nac;
+ALTER SEQUENCE role_role_id_seq OWNED BY role.role_id;
+CREATE TABLE servers (
+    server_id integer NOT NULL,
+    hostname character varying(128) NOT NULL,
+    file character varying(64) NOT NULL,
+    type character varying(64),
+    puppet character varying(16),
+    mco character varying(16),
+    file_systems character varying(512),
+    nfs_file_systems character varying(512),
+    nag_address character varying(128),
+    ip_addresses character varying(128),
+    interfaces character varying(128),
+    barcode integer,
+    role integer NOT NULL,
+    location character varying(128),
+    alias character varying(128),
+    status character varying(64) NOT NULL,
+    nag_location character varying(128),
+    deletion bigint
+);
+ALTER TABLE public.servers OWNER TO nac;
+CREATE SEQUENCE servers_server_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+ALTER TABLE public.servers_server_id_seq OWNER TO nac;
+ALTER SEQUENCE servers_server_id_seq OWNED BY servers.server_id;
+CREATE TABLE service_template (
+    service_template_id integer NOT NULL,
+    name character varying(128) NOT NULL,
+    build_name character varying(128) NOT NULL,
+    active_checks_enabled integer,
+    passive_checks_enabled integer,
+    parallelize_check integer,
+    obsess_over_service integer,
+    check_freshness integer,
+    notifications_enabled integer,
+    event_handler_enabled integer,
+    flap_detection_enabled integer,
+    failure_prediction_enabled integer,
+    process_perf_data integer,
+    retain_status_information integer,
+    retain_nonstatus_information integer,
+    is_volatile integer,
+    check_period character varying(64),
+    max_check_attempts integer,
+    check_interval integer,
+    retry_check_interval integer,
+    contact_groups character varying(128),
+    notification_options character varying(64),
+    notification_interval integer,
+    notification_period character varying(64),
+    register integer,
+    action_url character varying(512),
+    service_description character varying(128),
+    priority integer
+);
+ALTER TABLE public.service_template OWNER TO nac;
+CREATE SEQUENCE service_template_service_template_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+ALTER TABLE public.service_template_service_template_id_seq OWNER TO nac;
+ALTER SEQUENCE service_template_service_template_id_seq OWNED BY service_template.service_template_id;
+CREATE TABLE services (
+    service_id integer NOT NULL,
+    name character varying(512),
+    description character varying(128),
+    use character varying(128),
+    check_command character varying(512),
+    build_name character varying(128),
+    service_groups character varying(256),
+    nag_notes character varying(1024),
+    notes_url character varying(256),
+    int_notes character varying(1024),
+    location character varying(64),
+    nrpe character varying(3),
+    nrpe_name character varying(128),
+    nrpe_command character varying(512)
+);
+ALTER TABLE public.services OWNER TO nac;
+CREATE SEQUENCE services_service_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+ALTER TABLE public.services_service_id_seq OWNER TO nac;
+ALTER SEQUENCE services_service_id_seq OWNED BY services.service_id;
+CREATE TABLE sites (
+    site_id integer NOT NULL,
+    site_name character varying(16),
+    app_cluster character varying(16),
+    ui_name character varying(64)
+);
+ALTER TABLE public.sites OWNER TO nac;
+CREATE SEQUENCE sites_site_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+ALTER TABLE public.sites_site_id_seq OWNER TO nac;
+ALTER SEQUENCE sites_site_id_seq OWNED BY sites.site_id;
+CREATE TABLE time_periods (
+    time_periods_id integer NOT NULL,
+    name character varying(128) NOT NULL,
+    build_name character varying(128) NOT NULL,
+    alias character varying(128),
+    use character varying(128),
+    sunday character varying(128),
+    monday character varying(128),
+    tuesday character varying(128),
+    wednesday character varying(128),
+    thursday character varying(128),
+    friday character varying(128),
+    saturday character varying(128),
+    tp_other character varying(128)
+);
+ALTER TABLE public.time_periods OWNER TO nac;
+CREATE SEQUENCE time_periods_time_periods_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+ALTER TABLE public.time_periods_time_periods_id_seq OWNER TO nac;
+ALTER SEQUENCE time_periods_time_periods_id_seq OWNED BY time_periods.time_periods_id;
+ALTER TABLE ONLY commands ALTER COLUMN command_id SET DEFAULT nextval('commands_command_id_seq'::regclass);
+ALTER TABLE ONLY complaint_log ALTER COLUMN log_id SET DEFAULT nextval('complaint_log_log_id_seq'::regclass);
+ALTER TABLE ONLY contact_groups ALTER COLUMN contact_group_id SET DEFAULT nextval('contact_groups_contact_group_id_seq'::regclass);
+ALTER TABLE ONLY contacts ALTER COLUMN contact_id SET DEFAULT nextval('contacts_contact_id_seq'::regclass);
+ALTER TABLE ONLY deprecated_servers ALTER COLUMN server_id SET DEFAULT nextval('depricated_servers_server_id_seq'::regclass);
+ALTER TABLE ONLY deps ALTER COLUMN dep_id SET DEFAULT nextval('deps_dep_id_seq'::regclass);
+ALTER TABLE ONLY escalations ALTER COLUMN esc_id SET DEFAULT nextval('escalations_esc_id_seq'::regclass);
+ALTER TABLE ONLY facts ALTER COLUMN server_id SET DEFAULT nextval('facts_server_id_seq'::regclass);
+ALTER TABLE ONLY host_template ALTER COLUMN host_template_id SET DEFAULT nextval('host_template_host_template_id_seq'::regclass);
+ALTER TABLE ONLY role ALTER COLUMN role_id SET DEFAULT nextval('role_role_id_seq'::regclass);
+ALTER TABLE ONLY servers ALTER COLUMN server_id SET DEFAULT nextval('servers_server_id_seq'::regclass);
+ALTER TABLE ONLY service_template ALTER COLUMN service_template_id SET DEFAULT nextval('service_template_service_template_id_seq'::regclass);
+ALTER TABLE ONLY services ALTER COLUMN service_id SET DEFAULT nextval('services_service_id_seq'::regclass);
+ALTER TABLE ONLY sites ALTER COLUMN site_id SET DEFAULT nextval('sites_site_id_seq'::regclass);
+ALTER TABLE ONLY time_periods ALTER COLUMN time_periods_id SET DEFAULT nextval('time_periods_time_periods_id_seq'::regclass);
+ALTER TABLE ONLY commands
+    ADD CONSTRAINT commands_name_key UNIQUE (name);
+ALTER TABLE ONLY commands
+    ADD CONSTRAINT commands_pkey PRIMARY KEY (command_id);
+ALTER TABLE ONLY complaint_log
+    ADD CONSTRAINT complaint_log_pkey PRIMARY KEY (log_id);
+ALTER TABLE ONLY servers
+    ADD CONSTRAINT constraint_name UNIQUE (hostname);
+ALTER TABLE ONLY contact_groups
+    ADD CONSTRAINT contact_groups_pkey PRIMARY KEY (contact_group_id);
+ALTER TABLE ONLY contacts
+    ADD CONSTRAINT contacts_pkey PRIMARY KEY (contact_id);
+ALTER TABLE ONLY deprecated_servers
+    ADD CONSTRAINT depricated_servers_pkey PRIMARY KEY (server_id);
+ALTER TABLE ONLY deps
+    ADD CONSTRAINT deps_pkey PRIMARY KEY (dep_id);
+ALTER TABLE ONLY escalations
+    ADD CONSTRAINT escalations_pkey PRIMARY KEY (esc_id);
+ALTER TABLE ONLY facts
+    ADD CONSTRAINT facts_pkey PRIMARY KEY (server_id);
+ALTER TABLE ONLY host_template
+    ADD CONSTRAINT host_template_pkey PRIMARY KEY (host_template_id);
+ALTER TABLE ONLY role
+    ADD CONSTRAINT role_pkey PRIMARY KEY (role_id);
+ALTER TABLE ONLY servers
+    ADD CONSTRAINT servers_pkey PRIMARY KEY (server_id);
+ALTER TABLE ONLY service_template
+    ADD CONSTRAINT service_template_pkey PRIMARY KEY (service_template_id);
+ALTER TABLE ONLY services
+    ADD CONSTRAINT services_pkey PRIMARY KEY (service_id);
+ALTER TABLE ONLY sites
+    ADD CONSTRAINT sites_pkey PRIMARY KEY (site_id);
+ALTER TABLE ONLY services
+    ADD CONSTRAINT srv_name_unique UNIQUE (name);
+ALTER TABLE ONLY time_periods
+    ADD CONSTRAINT time_periods_pkey PRIMARY KEY (time_periods_id);
+CREATE UNIQUE INDEX nrpe_command_unique ON services USING btree (nrpe_command);
+CREATE UNIQUE INDEX nrpe_name_unique ON services USING btree (nrpe_name);
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
+REVOKE ALL ON SCHEMA public FROM nac;
+GRANT ALL ON SCHEMA public TO nac;
+GRANT ALL ON SCHEMA public TO PUBLIC;

@@ -1,0 +1,380 @@
+#!/bin/bash
+
+# set some variables
+. $(cat varset)
+
+use_admin_functions
+use_base_functions
+use_bust_functions
+use_date_functions
+use_check_functions
+use_form_functions
+
+
+##########################################################################################
+#####   Retrieve your data from the Query string
+##########################################################################################
+#echo $QUERY_STRING
+for X in  ${QUERY_STRING//&/ }; do
+  case $X in
+    SCR=*) SCR=${X#*=};;
+    DO=*) DO=${X#*=};;
+    SRV_ID=*) SRV_ID=${X#*=};;
+    NEW_NAME=*) NEW_NAME=$(bustit ${X#*=})
+	[[ ${#NEW_NAME} -ge 32 ]] && ERROR="$ERROR<br>The new name is too long, it must be less than 32 characters"
+	[[ ${#NEW_NAME} -le 4 ]] && ERROR="$ERROR<br>The new name is too short, it must be more than 4 characters"
+	[[ -n "$(echo "${NEW_NAME}" | tr -d "[ A-Za-z0-9_.\-]")" ]] && ERROR="$ERROR<br>The new name has invalid characters"
+	;;
+    NEW_NAME=*) NEW_NAME=$(bustit ${X#*=})
+	[[ ${#NEW_NAME} -ge 32 ]] && ERROR="$ERROR<br>The new name is too long, it must be less than 32 characters"
+	[[ ${#NEW_NAME} -le 4 ]] && ERROR="$ERROR<br>The new name is too short, it must be more than 4 characters"
+	[[ -n "$(echo "${NEW_NAME}" | tr -d "[ A-Za-z0-9_.\-]")" ]] && ERROR="$ERROR<br>The new name has invalid characters"
+	;;
+    NEW_BUILD_NAME=*) NEW_BUILD_NAME=$(bustit ${X#*=})
+	[[ ${#NEW_BUILD_NAME} -ge 32 ]] && ERROR="$ERROR<br>The new build name is too long, it must be less than 32 characters"
+	[[ ${#NEW_BUILD_NAME} -le 4 ]] && ERROR="$ERROR<br>The new build name is too short, it must be more than 4 characters"
+	[[ -n "$(echo "${NEW_BUILD_NAME}" | tr -d "[A-Za-z0-9_]")" ]] && ERROR="$ERROR<br>The new build name has invalid characters"
+	;;
+    NEW_DESCRIPTION=*) NEW_DESCRIPTION=$(bustit ${X#*=})
+	[[ ${#NEW_DESCRIPTION} -ge 128 ]] && ERROR="$ERROR<br>The new description is too long, it must be less than 128 characters"
+	[[ -n "$(echo "${NEW_DESCRIPTION}" | tr -d "[ A-Za-z0-9_?!,:.\-]")" ]] && ERROR="$ERROR<br>The new description has invalid characters"
+	;;
+    NEW_USE=*) NEW_USE=$(bustit ${X#*=})
+	[[ -n $NEW_USE ]] && {
+	  [[ ${#NEW_USE} -ge 168 ]] && ERROR="$ERROR<br>The template is too long, it must be less than 16 characters"
+	  [[ -n "$(echo "${NEW_USE}" | tr -d "[ A-Za-z0-9_?!,:.\-]")" ]] && ERROR="$ERROR<br>The template has invalid characters"
+	  NEW_USE_ID=$(echo "select service_template_id from service_template where name='${NEW_USE}';"|sql_query)
+	  [[ -z $NEW_USE_ID ]] && ERROR="$ERROR<br>That template does not exist"
+	}
+	;;
+    NEW_CHECK_COMMAND=*) NEW_CHECK_COMMAND=$(bustit ${X#*=})
+	[[ ${#NEW_CHECK_COMMAND} -ge 32 ]] && ERROR="$ERROR<br>The check command is too long, it must be less than 32 characters"
+	[[ -n "$(echo "${NEW_CHECK_COMMAND}" | tr -d "[ A-Za-z0-9_.\-]")" ]] && ERROR="$ERROR<br>The new check command has invalid characters"
+	NEW_CHECK_COMMAND=$(echo "select name from commands where name='${NEW_CHECK_COMMAND}';"|sql_query)
+	[[ -z $NEW_CHECK_COMMAND ]] && ERROR="$ERROR<br>That check command does not exist"
+	;;
+    NEW_CHECK_ATT=*) NEW_CHECK_ATT=$(sql_active_bust ${X#*=})
+	[[ ${#NEW_CHECK_ATT} -ge 128 ]] && ERROR="$ERROR<br>The check attributes are too long, it must be less than 32 characters"
+	[[ -n "$(echo "${NEW_CHECK_ATT}" | tr -d "[ A-Za-z0-9_\$!.\-]")" ]] && ERROR="$ERROR<br>The new check command attributes has invalid characters"
+	;;
+    #NEW_SERVICE_GROUPS=*) NEW_SERVICE_GROUPS=$(bustit ${X#*=}) ;;
+    NEW_NAG_NOTES=*) NEW_NAG_NOTES=$(bustit ${X#*=})
+	[[ ${#NEW_NAG_NOTES} -ge 2048 ]] && ERROR="$ERROR<br>The Notes are too long, it must be less than 2048 characters"
+	[[ -n "$(echo "${NEW_NAG_NOTES}" | tr -d "[ A-Za-z0-9_!?,().\-]")" ]] && ERROR="$ERROR<br>The nagios notes have invalid characters"
+	;;
+    NEW_NOTES_URL=*) NEW_NOTES_URL=$(bustit ${X#*=})
+	[[ ${#NEW_NOTES_URL} -ge 128 ]] && ERROR="$ERROR<br>The Notes URL is too long, it must be less than 128 characters"
+	[[ -n "$(echo "${NEW_NOTES_URL}" | tr -d "[ A-Za-z0-9_?&./:\-]")" ]] && ERROR="$ERROR<br>The Notes URL have invalid characters"
+	;;
+    #NEW_INT_NOTES=*) NEW_INT_NOTES=$(bustit ${X#*=});;
+    DEL_USE=*) DEL_U1=${X#*=}
+	[[ ${#DEL_U1} -ge 4 ]] && ERROR="$ERROR<br>The delete use field is too long. it can't be more than 4 characters"
+	DEL_USE="$DEL_USE,$DEL_U1"
+	;;
+
+    NEW_NRPE=*) NEW_NRPE=${X#*=}
+	[[ ${#NEW_NRPE} -gt 3 ]] && ERROR="$ERROR<br>The nrpe on/off is too long, it must be less than 3 characters"
+	[[ $NEW_NRPE == on || $NEW_NRPE == off ]] || ERROR="$ERROR<br>The nrpe value is invalid"
+	;;
+    NEW_NRPE_NAME=*) NEW_NRPE_NAME=$(bustit ${X#*=})
+	[[ ${#NEW_NAME_NRPE} -ge 128 ]] && ERROR="$ERROR<br>The nrpe name is too long, it must be less than 128 characters"
+	[[ -n "$(echo "${NEW_NAME_NRPE}" | tr -d "[ A-Za-z0-9_.\-]")" ]] && ERROR="$ERROR<br>The nrpe name contains invalid characters"
+	;;
+    NEW_NRPE_COMMAND=*) NEW_NRPE_COMMAND=$(bustit ${X#*=})
+	[[ ${#NEW_NAME_COMMAND} -ge 512 ]] && ERROR="$ERROR<br>The nrpe name is too long, it must be less than 128 characters"
+	[[ -n "$(echo "${NEW_NAME_NRPE}" | tr -d "[ A-Za-z0-9_.\-]%")" ]] && ERROR="$ERROR<br>The nrpe name contains invalid characters"
+	;;
+
+
+    ADD_OPTION=*) ADD_OPTION=${X#*=};;
+    RM_OPTION=*) RM_OPTION=${X#*=};;
+    
+    NEW_LOCATION=*) NEW_LOCATION=$(bustit ${X#*=});;
+  esac
+done
+
+[[ -z $DO || $DO == SHOW ]] && {
+  echo "<center><b>Services</center></b>"
+  echo "<center><a href=\"/cgi-bin/auth.cgi?SCR=$SCR&DO=ADD\">Add a new service</a> (coming soon)</center>"
+  echo "<table border=1 cellspacing=0 cellpadding=5>"
+  i=1
+  while IFS="|" read SRV_ID SRV_NAME SRV_CHECK_COMMAND SRV_DESC _ ; do 
+    [[ $i == 0 ]] && echo "<tr>"
+    echo "<td><a href=\"/cgi-bin/auth.cgi?SCR=$SCR&DO=SRV&SRV_ID=$SRV_ID\">$SRV_NAME</a>"
+    [[ $i == 3 ]] && { echo "</tr>"; i=0; }
+    i=$(($i+1))
+  done< <(echo "select service_id,name,check_command,description from services where service_id != 0 order by name" | sql_query)
+  echo "</table>"
+  exit 0
+}
+
+########################################################################################################################
+##### Add a new service
+########################################################################################################################
+[[ $DO == ADD && -n $NEW_NAME ]] && {
+  [[ -z ${NEW_CHECK_COMMAND} ]] && ERROR="$ERROR<br>A check command is required"
+  [[ -z ${NEW_USE} ]] && ERROR="$ERROR<br>A service template is required"
+  DUPE_NAME=$(echo "select name from services where name='$NEW_NAME';"|sql_query)
+  [[ -n $DUPE_NAME ]] && ERROR="$ERROR<br>That name already exists"
+  DUPE_BUILD_NAME=$(echo "select build_name from services where build_name='$NEW_BUILD_NAME';"|sql_query)
+  [[ -n $DUPE_BUILD_NAME ]] && ERROR="$ERROR<br>That build name already exists"
+  [[ -z $ERROR ]] && {
+    echo "insert into services (name,build_name,check_command,description,use) values ('$NEW_NAME','${NEW_BUILD_NAME}','${NEW_CHECK_COMMAND}!${NEW_CHECK_ATT}','$NEW_DESCRIPTION','${NEW_USE_ID#,}');" | sql_update
+    SRV_ID=$(echo "select service_id from services where name='${NEW_NAME}';" | sql_query)
+    [[ -z $SRV_ID ]] && ERROR="An Unknown error occured" || {
+      ERROR="Your new service has been added"
+      DO=SRV    
+    }
+  }
+}
+[[ $DO == ADD ]] && {
+	cat <<- EOF
+	<p id=error>$ERROR</p>
+	<center><b>Add a new service</center></b>
+	<form method=POST action=/cgi-bin/auth.cgi>
+	<br>
+	Service Name: <input type=text name="NEW_NAME" value="$NEW_NAME" size="32"><br>
+	Build Name: <input type=text name="NEW_BUILD_NAME" value="$NEW_BUILD_NAME" size="32">(no spaces)<br>
+	Description: <input type=text name="NEW_DESCRIPTION" value="$NEW_DESCRIPTION" size="100"><br>
+	Template to use: <input type=text name="NEW_USE" value="${NEW_USE#,}" size="50" list="SERVICE TEMPLATES"><br>
+	  <datalist id="SERVICE TEMPLATES">
+	    $(while IFS="|" read TP_NAME ; do echo "<option label=\"$TP_NAME\">${TP_NAME}</option>"; done< <(echo "select name from service_template order by priority" | sql_query) )
+	  </datalist>
+	Check Command:<br> 
+	  &nbsp&nbsp&nbsp&nbsp
+	  command <input type=text name="NEW_CHECK_COMMAND" value="${NEW_CHECK_COMMAND%%!*}" size="20" list=COMMANDS>
+	    <datalist id="COMMANDS">
+	      $(while read i ; do echo "    <option>$i</option>" ;done< <(echo "select name from commands" | sql_query) )
+	    </datalist>
+	  attributes:<input type=text name="NEW_CHECK_ATT" value="${NEW_CHECK_ATT#!}" size="50">(seperate attributes with "!")<br>
+	<br>
+	<input type=hidden name=SCR value=$SCR>
+	<input type=hidden name=DO value=$DO>
+	<input type=submit value="Add This Service">
+	</form><br>
+	EOF
+  exit 0
+}
+
+########################################################################################################################
+##### Update an existing service
+########################################################################################################################
+
+[[ $DO == UPDATE ]] && {
+  [[ -n $ADD_OPTION ]] && {
+    case $ADD_OPTION in
+      location) UPDATE="$UPDATE|location='savvis'";;
+    esac
+  }
+  [[ -n $RM_OPTION ]] && {
+    case $RM_OPTION in
+      location) UPDATE="$UPDATE|location=NULL";unset NEW_LOCATION;;
+    esac
+  }
+
+  while IFS="|" read NAME DESC USE CC B_NAME S_GROUP NAG_NOTES NOTES_URL INT_NOTES NRPE NRPE_NAME NRPE_COMMAND _ ; do
+    SERVICE_NAME[SRV_ID]=$NAME
+    SERVICE_DESC[SRV_ID]=$DESC
+    SERVICE_USE[SRV_ID]=$USE
+    SERVICE_CC[SRV_ID]=${CC%%!*}
+    echo "$SERVICE_CC" | grep "!" >/dev/null 2>&1 && SERVICE_ATT[SRV_ID]=${CC#*!}
+    SERVICE_B_NAME[SRV_ID]=$B_NAME
+    SERVICE_S_GROUP[SRV_ID]=$S_GROUP
+    SERVICE_NAG_NOTES[SRV_ID]=$NAG_NOTES
+    SERVICE_NOTES_URL[SRV_ID]=$NOTES_URL
+    SERVICE_INT_NOTES[SRV_ID]=$INT_NOTES
+    SERVICE_NRPE[SRV_ID]=$NRPE
+    SERVICE_NRPE_NAME[SRV_ID]=$NRPE_NAME
+    SERVICE_NRPE_COMMAND[SRV_ID]=$NRPE_COMMAND
+  done< <(echo "select name,description,use,check_command,build_name,service_groups,nag_notes,notes_url,int_notes,nrpe,nrpe_name,nrpe_command from services where service_id='$SRV_ID'" |sql_query)
+
+  [[ $NEW_NAME != ${SERVICE_NAME[SRV_ID]} ]] && {
+    [[ -z $NEW_NAME ]] && ERROR="$ERROR<br>A name is required"
+    UPDATE="$UPDATE|name='$NEW_NAME'"
+  }
+  [[ $NEW_DESCRIPTION != ${SERVICE_DESC[SRV_ID]} ]] && {
+    UPDATE="$UPDATE|description='$NEW_DESCRIPTION'"
+  }
+  [[ -n ${NEW_USE_ID} ]] && {
+    HOLD_IFS="$IFS"
+    IFS=","
+    for CURR_USE in ${SERVICE_USE[SRV_ID]} ; do
+      for X in $NEW_USE_ID ; do
+        [[ $CURR_USE == $X ]] && unset CURR_USE
+      done
+      [[ -z $CURR_USE ]] && ERROR="$ERROR<br>That template is already attached"
+    done
+    IFS="$HOLD_IFS"
+    NEW_USE_STRING="${SERVICE_USE[SRV_ID]},${NEW_USE_ID}"
+    UPDATE="$UPDATE|use='${NEW_USE_STRING#,}'"
+  }
+  [[ ${NEW_CHECK_COMMAND} != ${SERVICE_CC[SRV_ID]} || $NEW_CHECK_ATT != ${SERVICE_ATT[SRV_ID]} ]] && {
+    [[ -z $NEW_CHECK_COMMAND ]] && ERROR="$ERROR<br>A check_command is required"
+    [[ -n ${NEW_CHECK_ATT} ]] && NEW_CHECK_COMMAND="${NEW_CHECK_COMMAND}!${NEW_CHECK_ATT}"
+    UPDATE="$UPDATE|check_command='${NEW_CHECK_COMMAND}'"
+  }
+  [[ $NEW_BUILD_NAME != ${SERVICE_B_NAME[SRV_ID]} ]] && {
+    UPDATE="$UPDATE|build_name='$NEW_BUILD_NAME'"
+  }
+  [[ $NEW_SERVICE_GROUP != ${SERVICE_S_GROUP[SRV_ID]} ]] && {
+    UPDATE="$UPDATE|service_groups='$NEW_SERVICE_GROUP'"
+  }
+  [[ $NEW_NAG_NOTES != ${SERVICE_NAG_NOTES[SRV_ID]} ]] && {
+    UPDATE="$UPDATE|nag_notes='$NEW_NAG_NOTES'"
+  }
+  [[ $NEW_NOTES_URL != ${SERVICE_NOTES_URL[SRV_ID]} ]] && {
+    UPDATE="$UPDATE|notes_url='$NEW_NOTES_URL'"
+  }
+  [[ $NEW_INT_NOTES != ${SERVICE_INT_NOTES[SRV_ID]} ]] && {
+    UPDATE="$UPDATE|int_notes='$NEW_INT_NOTES'"
+  }
+  [[ $NEW_NRPE != ${SERVICE_NRPE[SRV_ID]} ]] && {
+    UPDATE="$UPDATE|nrpe='$NEW_NRPE'"
+  }
+  [[ $NEW_NRPE_NAME != ${SERVICE_NRPE_NAME[SRV_ID]} ]] && {
+    UPDATE="$UPDATE|nrpe_name='$NEW_NRPE_NAME'"
+  }
+  [[ $NEW_NRPE_COMMAND != ${SERVICE_NRPE_COMMAND[SRV_ID]} ]] && {
+    UPDATE="$UPDATE|nrpe_command='$NEW_NRPE_COMMAND'"
+  }
+	## THIS IS WHAT NEEDS TO BE FIXED!!!
+  [[ -n $DEL_USE ]] && {
+    HOLD_IFS="$IFS"
+    IFS=","
+    for CURR_USE in ${SERVICE_USE[SRV_ID]} ; do
+      for X in $DEL_USE ; do
+        [[ $CURR_USE == $X ]] && unset CURR_USE
+      done
+      [[ -n $CURR_USE ]] && USE_LIST="$USE_LIST,$CURR_USE"
+    done
+    IFS="$HOLD_IFS"
+    UPDATE="$UPDATE|use='${USE_LIST#,}'"
+  }
+
+  [[ -n $NEW_LOCATION ]] && {
+    case $NEW_LOCATION in
+      savvis) UPDATE="$UPDATE|location='savvis'";;
+      amz1) UPDATE="$UPDATE|location='amz1'";;
+      amz1oregon) UPDATE="$UPDATE|location='amz1oregon'";;
+      *) ERROR="$ERROR<br>Your location Information is invalid."
+    esac
+  }
+
+  ###### Make the changes here
+  [[ -z $ERROR && ! -z $UPDATE ]] && {
+    UPDATE_SQL=$(echo $UPDATE | sed 's/^|*//;s/|*$//;s/|/,/g')
+    #echo "$QUERY_STRING<br>"
+    #echo "update services set $UPDATE_SQL where service_id='$SRV_ID';"
+    echo "update services set $UPDATE_SQL where service_id='$SRV_ID';" | sql_update
+	ERROR="Your Change is complete"
+  }
+
+  DO=SRV
+}
+
+
+
+[[ $DO == SRV ]] && {
+
+while IFS="|" read ID NAME _ ; do
+    SERVICE_TEMPLATE_NAME[ID]=$NAME
+done< <(echo "select service_template_id,build_name from service_template" |sql_query)
+
+
+  IFS="|" read NAME DESC USE CHECK_COMMAND BUILD_NAME LOCATION NRPE NRPE_NAME NRPE_COMMAND _ <<< "$(echo "select name,description,use,check_command,build_name,location,nrpe,nrpe_name,nrpe_command from services where service_id='$SRV_ID';"|sql_query)"
+ [[ $NRPE == on ]] && NRPE_ON='checked' || unset NRPE_ON
+	cat <<- EOF
+	  <p id=error>$ERROR</p>
+	  <form method=POST action=/cgi-bin/auth.cgi>
+	  <center><b>$BUILD_NAME</b></center>
+	  <br>
+	  Service Name: <input type=text name="NEW_NAME" value="$NAME" size="32"><br>
+	  Build Name: <input type=text name="NEW_BUILD_NAME" value="$BUILD_NAME" size="32">(no spaces)<br>
+	  Description: <input type=text name="NEW_DESCRIPTION" value="$DESC" size="100"><br>
+
+	   <table cellspacing="0" cellpadding="2" border=0>
+	   <tr bgcolor=#EEE>
+		<td bgcolor=#FFF valign=top>Template to use: &nbsp &nbsp &nbsp &nbsp</td>
+		<td align=center>Remove</td>
+		<td align=center> &nbsp &nbsp &nbsp &nbsp Template &nbsp &nbsp &nbsp &nbsp <br>Name</td>
+		<td align=center>Priority<br><small>Lower number=higher priority</small></td> </tr>
+	    $(while IFS="|" read ST PRIORITY _; do
+	      echo "<tr><td></td><td><input type=checkbox name=DEL_USE value=$ST></td>"
+	      echo "   <td><a href=\"/cgi-bin/auth.cgi?SCR=service_temp_edit&DO=SRV_TMP&SRV_TMP_ID=${ST}\">${SERVICE_TEMPLATE_NAME[ST]}</a></td>"
+	      echo "   <td align=\"right\">$PRIORITY</td> </tr>"
+	      ## The next line is ugly but the '"'"' is what you need to show a ' in sed
+	  done< <(echo "select service_template_id,priority from service_template where $(echo $USE|sed 's/^/service_template_id='"'"'/;s/,/'"'"' or service_template_id='"'"'/g;s/$/'"'"'/') order by priority;"|sql_query) )
+	   </table>
+	  Add template: <input type=text name="NEW_USE" size="50" list=SERVICE_TEMPLATES><br>
+	   <datalist id="SERVICE_TEMPLATES">
+	     $(while read i ; do echo "    <option>$i</option>" ;done< <(echo "select name from service_template" | sql_query) )
+	   </datalist>
+    <table border=1 cellspacing=0 cellpadding=2>
+	   <tr><td colspan=2>Check Command:</td></tr>
+	   <tr>
+      <td align=center>NRPE<br>Command<br><input type="radio" name=NEW_NRPE value=on $NRPE_ON></td>
+      <td>NRPE Call Name<input type=text name="NEW_NRPE_NAME" value="${NRPE_NAME%%!*}" size="20" list=COMMANDS><br>
+	     Remote to run:<input type=text name="NEW_NRPE_COMMAND" value="${NRPE_COMMAND#*!}" size="50">
+      </td></tr>
+	   <tr>
+      <td align=center>Local<br>Command<br><input type=radio name=NEW_NRPE value=off $([[ -z $NRPE_ON ]] && echo checked)></td>
+      <td>Command (from list of commands) <input type=text name="NEW_CHECK_COMMAND" value="${CHECK_COMMAND%%!*}" size="20" list=COMMANDS>
+	     <datalist id="COMMANDS">
+    		$(while read i ; do echo "    <option>$i</option>" ;done< <(echo "select name from commands" | sql_query) )
+	     </datalist><br>
+	     Command Attributes:<input type=text name="NEW_CHECK_ATT" value="${CHECK_COMMAND#*!}" size="50">(seperate attributes with "!")
+      </td>
+     </tr>
+    </table>
+	  Service Groups: <input type=text name="NEW_SRV_GROUPS" value="$SRV_GROUPS" size="100"><br>
+	EOF
+        [[ -n $LOCATION ]] && {
+            echo "<br>Locations:"
+	    echo "<select name="NEW_LOCATION"><option>$LOCATION</option><option>savvis</option><option>amz1</option><option>amz1oregon</option></select>"
+            RM_OPTIONS_LIST="$RM_OPTIONS_LIST|location"
+          } || {
+            ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|location"
+          }
+	cat <<- EOF
+		<p><b>You will see these options inside of nagios</b></p>
+	  Nagios Notes: <input type=text name="NEW_NAG_NOTES" value="$NAG_NOTES" size="100"><br>
+	  Notes URL: <input type=text name="NEW_NOTES_URL" value="$NOTES_URL" size="100"><br>
+		<p><b>These only show up inside the admin Interface</b></p>
+	  Internal Notes: <input type=text name="NEW_INT_NOTES" value="$INT_NOTES" size="100"><br>
+	EOF
+
+	echo "<br><br>"
+	  add_remove_options
+	
+	cat <<- EOF
+	  <br>
+	  <input type=hidden name=SCR value=$SCR>
+	  <input type=hidden name=DO value=UPDATE>
+	  <input type=hidden name=SRV_ID value=$SRV_ID>
+	  <input type=submit value="Update This Service">
+	  </form><br>
+        <center><b>Service Information</b><br>Here are the roles this service is in:</center>
+	EOF
+
+  # show the role information
+  #while IFS="|" read ROLE_ID ROLE_NAME _ ; do
+  #  echo "<a href=>$ROLE_NAME </a>"
+  #done< <(echo "select role_id,name from role where services like '$SRV_ID %' or services like '% $SRV_ID %' or services like '% $SRV_ID';" | sql_query)
+  #echo "select role_id,name from role where services like '$SRV_ID %' or services like '% $SRV_ID %' or services like '% $SRV_ID';"
+
+
+  echo "<table border=0 cellspacing=0 cellpadding=5 align=center>"
+  a=0
+  while IFS="|" read ROLE_ID ROLE_NAME _ ; do
+    [[ $a == 0 ]] && echo "<tr>"
+    echo "<td align=center><a href=\"/cgi-bin/auth.cgi/?SCR=role_edit&DO=ROLE&ROLE_ID=${ROLE_ID}\">${ROLE_NAME}</a></td>"
+    a=$(($a+1))
+    [[ $a == 5 ]] && { echo "</tr>"; a=0; }
+  done< <(echo "select role_id,name from role where services like '$SRV_ID %' or services like '% $SRV_ID %' or services like '% $SRV_ID';" | sql_query)
+
+
+  echo "</table><br><br>"
+  echo "<br><br>"
+
+
+}

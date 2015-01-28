@@ -1,0 +1,567 @@
+#!/bin/bash
+
+# set some variables
+. $(cat varset)
+
+use_admin_functions
+use_base_functions
+use_bust_functions
+use_date_functions
+use_check_functions
+use_form_functions
+
+#echo $QUERY_STRING
+sno=0
+for X in  ${QUERY_STRING//&/ }; do
+  case $X in
+    SCR=*) SCR=${X#*=};;
+    DO=*) DO=${X#*=};;
+    SRV_TMP_ID=*) SRV_TMP_ID=${X#*=};;
+
+    DEL_NAME=*) NEW_NAME=$(bustit ${X#*=});;
+
+    NEW_NAME=*) NEW_NAME=$(bustit ${X#*=});;
+    NEW_BUILD_NAME=*) NEW_BUILD_NAME=$(bustit ${X#*=});;
+    NEW_ACTIVE_CHECKS_EN=*) NEW_ACTIVE_CHECKS_EN=$(bustit ${X#*=});;
+    NEW_PASSIVE_CHECKS_EN=*) NEW_PASSIVE_CHECKS_EN=$(bustit ${X#*=});;
+    NEW_OBSESS_OVER_SERVICE=*) NEW_OBSESS_OVER_SERVICE=$(bustit ${X#*=});;
+    NEW_CHECK_FRESHNESS=*) NEW_CHECK_FRESHNESS=$(bustit ${X#*=});;
+    NEW_NOTE_EN=*) NEW_NOTE_EN=$(bustit ${X#*=});;
+    NEW_EVENT_HANDLER_EN=*) NEW_EVENT_HANDLER_EN=$(bustit ${X#*=});;
+    NEW_FLAP_DETECTION_EN=*) NEW_FLAP_DETECTION_ENABLED=$(bustit ${X#*=});;
+    NEW_FAILURE_PREDICTION_EN=*) NEW_FAILURE_PREDICTION_EN=$(bustit ${X#*=});;
+    NEW_PROCESS_PERF_DATA=*) NEW_PROCESS_PERF_DATA=$(bustit ${X#*=});;
+    NEW_RETAIN_STATUS_INFO=*) NEW_RETAIN_STATUS_INFO=$(bustit ${X#*=});;
+    NEW_RETAIN_NONSTATUS_INFO=*) NEW_RETAIN_NONSTATUS_INFO=$(bustit ${X#*=});;
+    NEW_IS_VOLATILE=*) NEW_IS_VOLATILE=$(bustit ${X#*=});;
+    NEW_CHECK_PERIOD=*) NEW_CHECK_PERIOD[i++]=$(bustit ${X#*=});;
+    NEW_MAX_CHECK_ATT=*) NEW_MAX_CHECK_ATT=$(bustit ${X#*=});;
+    NEW_CHECK_INTERVAL=*) NEW_CHECK_INTERVAL=$(bustit ${X#*=});;
+    NEW_RETRY_CHECK_INTERVAL=*) NEW_RETRY_CHECK_INTERVAL=$(bustit ${X#*=});;
+    NEW_SERVICE_NOTE_OPTIONS=*) NEW_SERVICE_NOTE_OPTIONS[sno++]=$(bustit ${X#*=});;
+    NEW_NOTE_INTERVAL=*) NEW_NOTE_INTERVAL=$(bustit ${X#*=});;
+    NEW_NOTE_PERIOD=*) NEW_NOTE_PERIOD=$(bustit ${X#*=});;
+    NEW_REGISTER=*) NEW_REGISTER=$(bustit ${X#*=});;
+    NEW_ACTION_URL=*) NEW_ACTION_URL=$(sql_active_bust ${X#*=});;
+    NEW_CONTACT_GROUP=*) NEW_CONTACT_GROUP=$(bustit ${X#*=});;
+    NEW_PRIORITY=*) NEW_PRIORITY=$(bustit ${X#*=});;
+    DEL_CONTACT_GROUP=*) DEL_CONTACT_GROUP="$DEL_CONTACT_GROUP $(bustit ${X#*=})";;
+
+    ADD_OPTION=*) ADD_OPTION=${X#*=};;
+    RM_OPTION=*) RM_OPTION=${X#*=};;
+  esac
+done
+
+[[ $DO == NEW ]] && {
+  NEW_BUILD_NAME=$(echo $NEW_NAME | tr " [:upper:]" "_[:lower:]")
+  [[ ${#NEW_NAME} -gt 64 ]] && ERROR="$ERROR<br>That name is too long. Please pick something shorter"
+  [[ ${#NEW_NAME} -lt 4 ]] && ERROR="$ERROR<br>That name is too short. Please pick something longer"
+  [[ ! -z "$(echo "${NEW_NAME}" | tr -d "[ A-Za-z0-9+_.\-]")" ]] && ERROR="$ERROR <br> Invalid charcters in the name"
+  REPEAT=$(echo "select name from service_template where name='$NEW_NAME' or build_name='$NEW_BUILD_NAME';" |sql_query)
+  [[ ! -z $REPEAT ]] && ERROR="${ERROR} <br> That name already exists Please choose another"
+  [[ -z $ERROR ]] && {
+    echo "insert into service_template (name,build_name) values ('$NEW_NAME','$NEW_BUILD_NAME');"|sql_update
+    SRV_TMP_ID=$(echo "select service_template_id from service_template where name='$NEW_NAME';" |sql_query)
+    DO=SRV_TMP
+    DO=SHOW
+  } || {
+    echo "<p id=error>$ERROR</p>"
+    DO=SHOW
+  }
+}
+[[ $DO == DELETE ]] && {
+  REPEAT=$(echo "select name from service_template where service_template_id='$SRV_TMP_ID';" |sql_query)
+  [[ -z $REPEAT ]] && ERROR="$ERROR <br> That template does not exist"
+  #### <<--  check to see if this service is beign used anywhere
+  [[ -z $ERROR ]] && {
+    ERROR="The delete function is not ready yet"
+    #echo "delete from service_template where service_template_id='$SRV_TMP_ID'"|sql_update
+    DO=SHOW
+  } || {
+    echo "<p id=error>$ERROR</p>"
+    DO=SRV_TMP
+  }
+}
+
+[[ -z $DO || $DO == SHOW ]] && {
+cat <<- EOF
+  <center><b>Service Templates</center></b><br>
+  <form method=POST action=/cgi-bin/auth.cgi>
+    <center>New Service Template name: <input type=text name="NEW_NAME" size="30">
+    <input type=hidden name=SCR value=$SCR>
+    <input type=hidden name=DO value=NEW>
+    <input type=submit value="Add It">
+  </form></center><br>
+  <table border=1 cellspacing=0 cellpadding=5 align=center>
+EOF
+
+  i=1
+  while IFS="|" read SRV_TMP_ID NAME _ ; do 
+    [[ $SERVICE == "_" ]] && unset SERVICE
+    [[ $i == 0 ]] && echo "<tr>"
+    echo "<td><a href=\"/cgi-bin/auth.cgi?SCR=$SCR&DO=SRV_TMP&SRV_TMP_ID=$SRV_TMP_ID\">$NAME</a></td>"
+    [[ $i == 4 ]] && { echo "</tr>"; i=0; }
+    i=$(($i+1))
+  done< <(echo "select service_template_id,name from service_template order by name" | sql_query)
+  echo "</table>"
+  exit 0
+}
+
+[[ $DO == UPDATE ]] && {
+  ## do your checks
+  EXISTS=$(echo "select service_template_id from service_template where service_template_id='$SRV_TMP_ID';" |sql_query)
+  [[ -z $EXISTS ]] && {
+  ERROR="$ERROR <br> That Host Template does not exist"
+  } || {
+  ##### The following needs to be fixed. Check NEW SEVICE NAME for exploits and use a different bustit (sql)
+  [[ -n $ADD_OPTION ]] && {
+    case $ADD_OPTION in
+      notifications_enabled) UPDATE="$UPDATE|notifications_enabled='1'";;
+      active_checks_enabled) UPDATE="$UPDATE|active_checks_enabled='1'";;
+      passive_checks_enabled) UPDATE="$UPDATE|passive_checks_enabled='1'";;
+      obsess_over_service) UPDATE="$UPDATE|obsess_over_service='1'";;
+      check_freshness) UPDATE="$UPDATE|check_freshness='1'";;
+      is_volatile) UPDATE="$UPDATE|is_volatile='1'";;
+      event_handler_enabled) UPDATE="$UPDATE|event_handler_enabled='1'";;
+      flap_detection_enabled) UPDATE="$UPDATE|flap_detection_enabled='1'";;
+      failure_prediction_enabled) UPDATE="$UPDATE|failure_prediction_enabled='1'";;
+      process_perf_data) UPDATE="$UPDATE|process_perf_data='1'";;
+      retain_status_information) UPDATE="$UPDATE|retain_status_information='1'";;
+      retain_nonstatus_information) UPDATE="$UPDATE|retain_nonstatus_information='1'";;
+      register) UPDATE="$UPDATE|register='0'";;
+      max_check_attempts) UPDATE="$UPDATE|max_check_attempts='10'";;
+      check_interval) UPDATE="$UPDATE|check_interval='120'";;
+      retry_check_interval) UPDATE="$UPDATE|retry_check_interval='120'";;
+      notification_interval) UPDATE="$UPDATE|notification_interval='120'";;
+      notification_options) UPDATE="$UPDATE|notification_options='d,u,r'";;
+      notification_period) UPDATE="$UPDATE|notification_period='0'";;
+      check_period) UPDATE="$UPDATE|check_period='0'";;
+      action_url) UPDATE="$UPDATE|action_url='_'";;
+      contact_groups) UPDATE="$UPDATE|contact_groups='0'";;
+    esac
+  }
+
+  [[ -n $RM_OPTION ]] && {
+    case $RM_OPTION in
+      notifications_enabled) UPDATE="$UPDATE|notifications_enabled=NULL";unset NEW_NOTE_EN;;
+      active_checks_enabled) UPDATE="$UPDATE|active_checks_enabled=NULL";unset NEW_ACTIVE_CHECKS_EN;;
+      passive_checks_enabled) UPDATE="$UPDATE|passive_checks_enabled=NULL";unset NEW_PASSIVE_CHECKS_EN;;
+      obsess_over_service) UPDATE="$UPDATE|obsess_over_service=NULL";unset NEW_OBSESS_OVER_SERVICE;;
+      check_freshness) UPDATE="$UPDATE|check_freshness=NULL";unset NEW_CHECK_FRESHNESS;;
+      is_volatile) UPDATE="$UPDATE|is_volatile=NULL";unset NEW_IS_VOLATILE;;
+      event_handler_enabled) UPDATE="$UPDATE|event_handler_enabled=NULL";unset NEW_EVENT_HANDLER_EN;;
+      flap_detection_enabled) UPDATE="$UPDATE|flap_detection_enabled=NULL";unset NEW_FLAP_DETECTION_EN;;
+      failure_prediction_enabled) UPDATE="$UPDATE|failure_prediction_enabled=NULL";unset NEW_FAILURE_PREDICTION_EN;;
+      process_perf_data) UPDATE="$UPDATE|process_perf_data=NULL";unset NEW_PROCESS_PERF_DATA;;
+      retain_status_information) UPDATE="$UPDATE|retain_status_information=NULL";unset NEW_RETAIN_STATUS_INFO;;
+      retain_nonstatus_information) UPDATE="$UPDATE|retain_nonstatus_information=NULL";unset NEW_RETAIN_NONSTATUS_INFO;;
+      register) UPDATE="$UPDATE|register=NULL";unset NEW_REGISTER;;
+      max_check_attempts) UPDATE="$UPDATE|max_check_attempts=NULL";unset NEW_MAX_CHECK_ATT;;
+      check_interval) UPDATE="$UPDATE|check_interval=NULL";unset NEW_CHECK_INTERVAL;;
+      retry_check_interval) UPDATE="$UPDATE|retry_check_interval=NULL";unset NEW_RETRY_CHECK_INTERVAL;;
+      notification_interval) UPDATE="$UPDATE|notification_interval=NULL";unset NEW_NOTE_INTERVAL;;
+      notification_options) UPDATE="$UPDATE|notification_options=NULL";unset NEW_SERVICE_NOTE_OPTIONS;;
+      notification_period) UPDATE="$UPDATE|notification_period=NULL";unset NEW_NOTE_PERIOD;;
+      check_period) UPDATE="$UPDATE|check_period=NULL"; unset NEW_CHECK_PERIOD;;
+      action_url) UPDATE="$UPDATE|action_url=NULL"; unset NEW_ACTION_URL;;
+      contact_groups) UPDATE="$UPDATE|contact_groups=NULL"; unset NEW_CONTACT_GROUP DEL_CONTACT_GROUP;;
+    esac
+  }
+  [[ -n $NEW_NOTE_EN ]] && {
+    case $NEW_NOTE_EN in
+      0) UPDATE="$UPDATE|notifications_enabled='0'";;
+      1) UPDATE="$UPDATE|notifications_enabled='1'";;
+      *) ERROR="$ERROR<br>Your Notifications Enabled is invalid."
+    esac
+  }
+  [[ -n $NEW_ACTIVE_CHECKS_EN ]] && {
+    case $NEW_ACTIVE_CHECKS_EN in
+      0) UPDATE="$UPDATE|active_checks_enabled='0'";;
+      1) UPDATE="$UPDATE|active_checks_enabled='1'";;
+      *) ERROR="$ERROR<br>Your Active Checks Enabled is invalid."
+    esac
+  }
+  [[ -n $NEW_PASSIVE_CHECKS_EN ]] && {
+    case $NEW_PASSIVE_CHECKS_EN in
+      0) UPDATE="$UPDATE|passive_checks_enabled='0'";;
+      1) UPDATE="$UPDATE|passive_checks_enabled='1'";;
+      *) ERROR="$ERROR<br>Your Passive Checks Enabled is invalid."
+    esac
+  }
+  [[ -n $NEW_OBSESS_OVER_SERVICE ]] && {
+    case $NEW_OBSESS_OVER_SERVICE in
+      0) UPDATE="$UPDATE|obsess_over_service='0'";;
+      1) UPDATE="$UPDATE|obsess_over_service='1'";;
+      *) ERROR="$ERROR<br>Your Obsess over Service is invalid."
+    esac
+  }
+  [[ -n $NEW_CHECK_FRESHNESS ]] && {
+    case $NEW_CHECK_FRESHNESS in
+      0) UPDATE="$UPDATE|check_freshness='0'";;
+      1) UPDATE="$UPDATE|check_freshness='1'";;
+      *) ERROR="$ERROR<br>Your Check Freshness is invalid."
+    esac
+  }
+  [[ -n $NEW_IS_VOLATILE ]] && {
+    case $NEW_IS_VOLATILE in
+      0) UPDATE="$UPDATE|is_volatile='0'";;
+      1) UPDATE="$UPDATE|is_volatile='1'";;
+      *) ERROR="$ERROR<br>Your Is Volatile is invalid."
+    esac
+  }
+  [[ -n $NEW_EVENT_HANDLER_EN ]] && {
+    case $NEW_EVENT_HANDLER_EN in
+      0) UPDATE="$UPDATE|event_handler_enabled='0'";;
+      1) UPDATE="$UPDATE|event_handler_enabled='1'";;
+      *) ERROR="$ERROR<br>Your Event Handler Enabled is invalid."
+    esac
+  }
+  [[ -n $NEW_FLAP_DETECTION_EN ]] && {
+    case $NEW_FLAP_DETECTION_EN in
+      0) UPDATE="$UPDATE|flap_detection_enabled='0'";;
+      1) UPDATE="$UPDATE|flap_detection_enabled='1'";;
+      *) ERROR="$ERROR<br>Your Flap Detection Enabled is invalid."
+    esac
+  }
+  [[ -n $NEW_FAILURE_PREDICTION_EN ]] && {
+    case $NEW_FAILURE_PREDICTION_EN in
+      0) UPDATE="$UPDATE|failure_prediction_enabled='0'";;
+      1) UPDATE="$UPDATE|failure_prediction_enabled='1'";;
+      *) ERROR="$ERROR<br>Your Failure Prediction Enabled is invalid."
+    esac
+  }
+  [[ -n $NEW_PROCESS_PERF_DATA ]] && {
+    case $NEW_PROCESS_PERF_DATA in
+      0) UPDATE="$UPDATE|process_perf_data='0'";;
+      1) UPDATE="$UPDATE|process_perf_data='1'";;
+      *) ERROR="$ERROR<br>Your Process Perf Data is invalid."
+    esac
+  }
+  [[ -n $NEW_RETAIN_STATUS_INFO ]] && {
+    case $NEW_RETAIN_STATUS_INFO in
+      0) UPDATE="$UPDATE|retain_status_information='0'";;
+      1) UPDATE="$UPDATE|retain_status_information='1'";;
+      *) ERROR="$ERROR<br>Your Retain Status Information is invalid."
+    esac
+  }
+  [[ -n $NEW_RETAIN_NONSTATUS_INFO ]] && {
+    case $NEW_RETAIN_NONSTATUS_INFO in
+      0) UPDATE="$UPDATE|retain_nonstatus_information='0'";;
+      1) UPDATE="$UPDATE|retain_nonstatus_information='1'";;
+      *) ERROR="$ERROR<br>Your Retain Non-Status Information is invalid."
+    esac
+  }
+  [[ -n $NEW_REGISTER ]] && {
+    case $NEW_REGISTER in
+      0) UPDATE="$UPDATE|register='0'";;
+      1) UPDATE="$UPDATE|register='1'";;
+      *) ERROR="$ERROR<br>Your Register Information is invalid."
+    esac
+  }
+  [[ -n $NEW_MAX_CHECK_ATT ]] && {
+    [[ ${#NEW_MAX_CHECK_ATT} -gt 6 ]] && ERROR="$ERROR<br>Your max check attempts is too long. Please pick something shorter"
+    [[ ! -z "$(echo "${NEW_MAX_CHECK_ATT}" | tr -d "[0-9]")" ]] && ERROR="$ERROR <br> Invalid charcters in your max check attempts"
+    [[ -z $ERROR ]] && {
+      UPDATE="$UPDATE|max_check_attempts='$NEW_MAX_CHECK_ATT'"
+    }
+  }
+
+  [[ -n $NEW_CHECK_INTERVAL ]] && {
+    [[ ${#NEW_CHECK_INTERVAL} -gt 6 ]] && ERROR="$ERROR<br>Your Check interval is too long. Please pick something shorter"
+    [[ ! -z "$(echo "${NEW_CHECK_INTERVAL}" | tr -d "[0-9]")" ]] && ERROR="$ERROR <br> Invalid charcters in your Check interval"
+    [[ -z $ERROR ]] && {
+      UPDATE="$UPDATE|check_interval='$NEW_CHECK_INTERVAL'"
+    }
+  }
+  [[ -n $NEW_RETRY_CHECK_INTERVAL ]] && {
+    [[ ${#NEW_RETRY_CHECK_INTERVAL} -gt 6 ]] && ERROR="$ERROR<br>Your retry Check interval is too long. Please pick something shorter"
+    [[ ! -z "$(echo "${NEW_RETRY_CHECK_INTERVAL}" | tr -d "[0-9]")" ]] && ERROR="$ERROR <br> Invalid charcters in your retry Check interval"
+    [[ -z $ERROR ]] && {
+      UPDATE="$UPDATE|retry_check_interval='$NEW_RETRY_CHECK_INTERVAL'"
+    }
+  }
+
+  [[ -n $NEW_NOTE_INTERVAL ]] && {
+    [[ ${#NEW_NOTE_INTERVAL} -gt 6 ]] && ERROR="$ERROR<br>Your Notification interval is too long. Please pick something shorter"
+    [[ ! -z "$(echo "${NEW_NOTE_INTERVAL}" | tr -d "[0-9]")" ]] && ERROR="$ERROR <br> Invalid charcters in your Notification interval"
+    [[ -z $ERROR ]] && {
+      UPDATE="$UPDATE|notification_interval='$NEW_NOTE_INTERVAL'"
+    }
+  }
+  [[ -n $NEW_SERVICE_NOTE_OPTIONS ]] && {
+    check_set_service_note_options "notification_options"
+  }
+  [[ -n $NEW_NOTE_PERIOD ]] && {
+    NEW_NOTE_PERIOD_ID=$(check_time_period $NEW_NOTE_PERIOD) 
+    [[ $? != 0 ]] && ERROR="$ERROR<br>$NEW_NOTE_PERIOD_ID"
+    [[ -n $NEW_NOTE_PERIOD_ID && -z $ERROR ]] && {
+	UPDATE="$UPDATE|notification_period='$NEW_NOTE_PERIOD_ID'"
+    }
+  }
+  [[ -n $NEW_CHECK_PERIOD ]] && {
+    NEW_CHECK_PERIOD_ID=$(check_time_period $NEW_CHECK_PERIOD) 
+    [[ $? != 0 ]] && ERROR="$ERROR<br>$NEW_CHECK_PERIOD_ID"
+    [[ -n $NEW_CHECK_PERIOD_ID && -z $ERROR ]] && {
+      UPDATE="$UPDATE|check_period='$NEW_CHECK_PERIOD_ID'"
+    }
+  }
+  [[ -n $NEW_ACTION_URL ]] && {
+      UPDATE="$UPDATE|action_url='$NEW_ACTION_URL'"
+  }
+    [[ -n $NEW_CONTACT_GROUP ]] && {
+      [[ ! -z "$(echo "${NEW_CONTACT_GROUP}" | tr -d "[ A-Za-z0-9+_.\-]")" ]] && ERROR="$ERROR <br> Invalid Contact group"
+      NEW_GROUP_ID=$(echo "select contact_group_id from contact_groups where name='$NEW_CONTACT_GROUP';" |sql_query)
+      [[ -z $NEW_GROUP_ID ]] && {
+        ERROR="$ERROR <br> That Group does not exist"
+      } || {
+        read CURR_CONTACT_GROUPS _ <<< $(echo "select contact_groups from service_template where service_template_id='$SRV_TMP_ID';" |sql_query)
+        for X in $(echo $CURR_CONTACT_GROUPS|tr "," " "); do [[ $NEW_GROUP_ID == $X ]] && ERROR="$ERROR <br> That group is already a member of this template" ; done
+      }
+      [[ -z $ERROR ]] && {
+        [[ $CURR_CONTACT_GROUPS == 0 || -z $CURR_CONTACT_GROUPS ]] && UPDATE="$UPDATE|contact_groups='$NEW_GROUP_ID'" || UPDATE="$UPDATE|contact_groups='$CURR_CONTACT_GROUPS,$NEW_GROUP_ID'"
+      }
+    }
+    [[ -n $DEL_CONTACT_GROUP ]] && {
+      read CCG _ <<< $(echo "select contact_groups from service_template where service_template_id='$SRV_TMP_ID';" |sql_query)
+      [[ -z $ERROR ]] && {
+        for DCG in $DEL_CONTACT_GROUP; do
+	  [[ $DCG == $CCG ]] && CCG=0
+          for C_CCG in $(echo $CCG|tr "," " "); do 
+	    [[ ! $DCG == $C_CCG ]] && {
+	      [[ -z $NEW_CCG ]] && NEW_CCG="$C_CCG" || NEW_CCG="$NEW_CCG,$C_CCG"
+	    }
+	  done
+          CCG=$NEW_CCG ; unset NEW_CCG
+        done
+        [[ -z $CCG ]] && CCG=0
+      UPDATE="$UPDATE|contact_groups='$CCG'"
+      }
+    }
+    [[ -z $NEW_PRIORITY ]] && {
+      UPDATE="$UPDATE|priority='16'"
+    } || {
+      [[ ! -z "$(echo ${NEW_PRIORITY} | tr -d "[0-9]")" ]] && ERROR="$ERROR <br> Invalid charcters in your priority"
+      [[ ${NEW_PRIORITY} -gt 16 ]] && ERROR="$ERROR <br> Your prority is too high "
+      [[ ${NEW_PRIORITY} -lt 0 ]] && ERROR="$ERROR <br> Your prority is too low "
+      UPDATE="$UPDATE|priority='$NEW_PRIORITY'"
+    }
+
+
+###### Make the changes here
+  [[ -z $ERROR && ! -z $UPDATE ]] && {
+    UPDATE_SQL=$(echo $UPDATE | sed 's/^|*//;s/|*$//;s/|/,/g')
+    #echo "update service_template set $UPDATE_SQL where service_template_id='$SRV_TMP_ID';"
+    echo "update service_template set $UPDATE_SQL where service_template_id='$SRV_TMP_ID';" | sql_update
+  }
+
+#    ########### <<-- Write everything to autit lots, error logs and complaint logs
+  }
+  DO=SRV_TMP
+}
+
+[[ $DO == SRV_TMP ]] && {
+  get_contact_groups
+
+  IFS="|" read NAME ACTIVE_CHECKS_EN PASSIVE_CHECKS_EN OBSESS_OVER_SERVICE CHECK_FRESHNESS IS_VOLATILE NOTE_EN EVENT_HANDLER_EN FLAP_DETECTION_EN FAILURE_PREDICTION_EN PROCESS_PERF_DATA RETAIN_STATUS_INFO RETAIN_NONSTATUS_INFO NOTE_PERIOD REGISTER MAX_CHECK_ATT CHECK_INTERVAL RETRY_CHECK_INTERVAL NOTE_INTERVAL NOTE_OPTIONS CHECK_PERIOD CONTACT_GROUPS ACTION_URL PRIORITY _ <<< "$(echo "select name,active_checks_enabled,passive_checks_enabled,obsess_over_service,check_freshness,is_volatile,notifications_enabled,event_handler_enabled,flap_detection_enabled,failure_prediction_enabled,process_perf_data,retain_status_information,retain_nonstatus_information,notification_period,register,max_check_attempts,check_interval,retry_check_interval,notification_interval,notification_options,check_period,contact_groups,action_url,priority from service_template where service_template_id='$SRV_TMP_ID';" | sql_query)"
+	#[[ -z $PRIORITY ]] && PRIORITY=16
+	cat <<- EOF
+	  <p id=error>$ERROR</p>
+	  <form method=POST action=/cgi-bin/auth.cgi>
+	  <center><b>$BUILD_NAME</b></center>
+	  <br>
+	  Name: <input type=text name="NEW_NAME" value="$NAME" size="100"><br><br>
+	  Priority: <select name="NEW_PRIORITY"> <option>$PRIORITY</option>
+		$(for X in {0..16} ; do echo "<option>$X</option>" ; done)
+		</select><br>
+	EOF
+
+	  [[ -n $NOTE_EN ]] && {
+	    [[ $NOTE_EN == 1 ]] && { ON="checked";OFF=""; } || { ON="";OFF="checked"; }
+	    echo "<br>Notifications: <input type=radio name=\"NEW_NOTE_EN\" value=\"1\" $ON>ON<input type=radio name=\"NEW_NOTE_EN\" value=\"0\" $OFF>OFF<br>"
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|notifications_enabled"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|notifications_enabled"
+	  }
+	  [[ -n $ACTIVE_CHECKS_EN ]] && {
+	    [[ $ACTIVE_CHECKS_EN == 1 ]] && { ON="checked";OFF=""; } || { ON="";OFF="checked"; }
+	    echo "<br>Enable Active Checks: <input type=radio name=\"NEW_ACTIVE_CHECKS_EN\" value=\"1\" $ON>ON<input type=radio name=\"NEW_ACTIVE_CHECKS_EN\" value=\"0\" $OFF>OFF<br>"
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|active_checks_enabled"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|active_checks_enabled"
+	  }
+	  [[ -n $PASSIVE_CHECKS_EN ]] && {
+	    [[ $PASSIVE_CHECKS_EN == 1 ]] && { ON="checked";OFF=""; } || { ON="";OFF="checked"; }
+	    echo "<br>Enable Passive Checks: <input type=radio name=\"NEW_PASSIVE_CHECKS_EN\" value=\"1\" $ON>ON<input type=radio name=\"NEW_PASSIVE_CHECKS_EN\" value=\"0\" $OFF>OFF<br>"
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|passive_checks_enabled"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|passive_checks_enabled"
+	  }
+	  [[ -n $OBSESS_OVER_SERVICE ]] && {
+	    [[ $OBSESS_OVER_SERVICE == 1 ]] && { ON="checked";OFF=""; } || { ON="";OFF="checked"; }
+	    echo "<br>Obsess over service: <input type=radio name=\"NEW_OBSESS_OVER_SERVICE\" value=\"1\" $ON>ON<input type=radio name=\"NEW_OBSESS_OVER_SERVICE\" value=\"0\" $OFF>OFF<br>"
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|obsess_over_service"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|obsess_over_service"
+	  }
+	  [[ -n $CHECK_FRESHNESS ]] && {
+	    [[ $CHECK_FRESHNESS == 1 ]] && { ON="checked";OFF=""; } || { ON="";OFF="checked"; }
+	    echo "<br>Check freshness: <input type=radio name=\"NEW_CHECK_FRESHNESS\" value=\"1\" $ON>ON<input type=radio name=\"NEW_CHECK_FRESHNESS\" value=\"0\" $OFF>OFF<br>"
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|check_freshness"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|check_freshness"
+	  }
+	  [[ -n $IS_VOLATILE ]] && {
+	    [[ $IS_VOLATILE == 1 ]] && { ON="checked";OFF=""; } || { ON="";OFF="checked"; }
+	    echo "<br>Is Volatile: <input type=radio name=\"NEW_IS_VOLATILE\" value=\"1\" $ON>ON<input type=radio name=\"NEW_IS_VOLATILE\" value=\"0\" $OFF>OFF<br>"
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|is_volatile"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|is_volatile"
+	  }
+	  [[ -n $EVENT_HANDLER_EN ]] && {
+	    [[ $EVENT_HANDLER_EN == 1 ]] && { ON="checked";OFF=""; } || { ON="";OFF="checked"; }
+	    echo "<br>Event Handler: <input type=radio name=\"NEW_EVENT_HANDLER_EN\" value=\"1\" $ON>ON<input type=radio name=\"NEW_EVENT_HANDLER_EN\" value=\"0\" $OFF>OFF<br>"
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|event_handler_enabled"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|event_handler_enabled"
+	  }
+	  [[ -n $FLAP_DETECTION_EN ]] && {
+	    [[ $FLAP_DETECTION_EN == 1 ]] && { ON="checked";OFF=""; } || { ON="";OFF="checked"; }
+	    echo "<br>Flap Detection: <input type=radio name=\"NEW_FLAP_DETECTION_EN\" value=\"1\" $ON>ON<input type=radio name=\"NEW_FLAP_DETECTION_EN\" value=\"0\" $OFF>OFF<br>"
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|flap_detection_enabled"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|flap_detection_enabled"
+	  }
+	  [[ -n $FAILURE_PREDICTION_EN ]] && {
+	    [[ $FAILURE_PREDICTION_EN == 1 ]] && { ON="checked";OFF=""; } || { ON="";OFF="checked"; }
+	    echo "<br>Failure Prediction: <input type=radio name=\"NEW_FAILURE_PREDICTION_EN\" value=\"1\" $ON>ON<input type=radio name=\"NEW_FAILURE_PREDICTION_EN\" value=\"0\" $OFF>OFF<br>"
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|failure_prediction_enabled"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|failure_prediction_enabled"
+	  }
+	  [[ -n $PROCESS_PERF_DATA ]] && {
+	    [[ $PROCESS_PERF_DATA == 1 ]] && { ON="checked";OFF=""; } || { ON="";OFF="checked"; }
+	    echo "<br>Process Performance Data: <input type=radio name=\"NEW_PROCESS_PERF_DATA\" value=\"1\" $ON>Yes<input type=radio name=\"NEW_PROCESS_PERF_DATA\" value=\"0\" $OFF>No<br>"
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|process_perf_data"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|process_perf_data"
+	  }
+	  [[ -n $RETAIN_STATUS_INFO ]] && {
+	    [[ $RETAIN_STATUS_INFO == 1 ]] && { ON="checked";OFF=""; } || { ON="";OFF="checked"; }
+	    echo "<br>Retain Status Information: <input type=radio name=\"NEW_RETAIN_STATUS_INFO\" value=\"1\" $ON>Yes<input type=radio name=\"NEW_RETAIN_STATUS_INFO\" value=\"0\" $OFF>No<br>"
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|retain_status_information"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|retain_status_information"
+	  }
+	  [[ -n $RETAIN_NONSTATUS_INFO ]] && {
+	    [[ $RETAIN_NONSTATUS_INFO == 1 ]] && { ON="checked";OFF=""; } || { ON="";OFF="checked"; }
+	    echo "<br>Retain Non-Status Information: <input type=radio name=\"NEW_RETAIN_NONSTATUS_INFO\" value=\"1\" $ON>Yes<input type=radio name=\"NEW_RETAIN_NONSTATUS_INFO\" value=\"0\" $OFF>No<br>"
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|retain_nonstatus_information"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|retain_nonstatus_information"
+	  }
+	  [[ -n $REGISTER ]] && {
+	    [[ $REGISTER == 1 ]] && { ON="checked";OFF=""; } || { ON="";OFF="checked"; }
+	    echo "<br>Register: <input type=radio name=\"NEW_REGISTER\" value=\"1\" $ON>Yes<input type=radio name=\"NEW_REGISTER\" value=\"0\" $OFF>No<br>"
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|register"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|register"
+	  }
+	  [[ -n $NOTE_PERIOD ]] && {
+	    #NOTE_PERIOD_NAME=$(echo "select name from time_periods where time_periods_id='$NOTE_PERIOD';"|sql_query)
+	    #echo "<br>Notification Period: <input type=text name=\"NEW_NOTE_PERIOD\" value=\"$NOTE_PERIOD_NAME\">"
+	    ##### <<- Add autofill options here
+	    echo "<br>Notification Period:  "; show_timeperiod "NEW_NOTE_PERIOD" "$NOTE_PERIOD"
+            echo "<br>"
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|notification_period"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|notification_period"
+	  }
+	  [[ -n $MAX_CHECK_ATT ]] && {
+	    echo "<br>Max Check Attempts: <input type=text name=\"NEW_MAX_CHECK_ATT\" value=\"$MAX_CHECK_ATT\">"
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|max_check_attempts"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|max_check_attempts"
+	  }
+	  [[ -n $CHECK_INTERVAL ]] && {
+	    echo "<br>Check Interval: <input type=text name=\"NEW_CHECK_INTERVAL\" value=\"$CHECK_INTERVAL\">"
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|check_interval"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|check_interval"
+	  }
+	  [[ -n $RETRY_CHECK_INTERVAL ]] && {
+	    echo "<br>Retry Check Interval: <input type=text name=\"NEW_RETRY_CHECK_INTERVAL\" value=\"$RETRY_CHECK_INTERVAL\">"
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|retry_check_interval"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|retry_check_interval"
+	  }
+	  [[ -n $NOTE_INTERVAL ]] && {
+	    echo "<br>Notification Interval: <input type=text name=\"NEW_NOTE_INTERVAL\" value=\"$NOTE_INTERVAL\">"
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|notification_interval"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|notification_interval"
+	  }
+	  [[ -n $NOTE_OPTIONS ]] && {
+	    echo "<br>Notification Options:"
+	    show_service_note_options "select notification_options from service_template where service_template_id='$SRV_TMP_ID';"
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|notification_options"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|notification_options"
+	  }
+	  [[ -n $CHECK_PERIOD ]] && {
+	    #CHECK_PERIOD_NAME=$(echo "select name from time_periods where time_periods_id='$NOTE_PERIOD';"|sql_query)
+	    #echo "Check Period: <input type=text name=\"NEW_CHECK_PERIOD\" value=\"$CHECK_PERIOD_NAME\">"
+	    ##### <<- Add autofill options here
+	    echo "<br>Check Period:  "; show_timeperiod "NEW_CHECK_PERIOD" "$CHECK_PERIOD"
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|check_period"
+	  } || {
+	    ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|check_period"
+	  }
+	  [[ -n $ACTION_URL ]] && {
+	    [[ $ACTION_URL == "_" ]] && unset ACTION_URL
+	    echo "<br>Action URL <input type=text name=\"NEW_ACTION_URL\" value=\"$ACTION_URL\" size=94>"
+	    RM_OPTIONS_LIST="$RM_OPTIONS_LIST|action_url"
+	  } || ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|action_url"
+
+          [[ -n $CONTACT_GROUPS ]] && {
+            [[ $GROUPS == "0" ]] && unset GROUPS
+            echo "<br>Contact Groups: (check to remove):<br>"
+              while IFS="|" read G _; do
+                echo "<input type=checkbox name=DEL_CONTACT_GROUP value=$G>${GT[G]}<BR>"
+		## The next line is ugly but the '"'"' is what you need to show a ' in sed
+              done< <(echo "select contact_group_id from contact_groups where $(echo $CONTACT_GROUPS|sed 's/^/contact_group_id='"'"'/;s/,/'"'"' or contact_group_id='"'"'/g;s/$/'"'"'/');" |sql_query)
+            echo "<br>&nbsp;&nbsp;&nbsp; Add a Group: <input type=text name=\"NEW_CONTACT_GROUP\" value=\"\" size=\"32\" list=\"GROUP_CONTACTS\"><br>"
+            echo "<datalist id=\"GROUP_CONTACTS\">"
+            for i in ${!GT[*]} ; do echo "    <option label=\"${GT[$i]}\">${GT[$i]}</option>";done
+            echo "</datalist>"
+            RM_OPTIONS_LIST="$RM_OPTIONS_LIST|contact_groups"
+          } || ADD_OPTIONS_LIST="$ADD_OPTIONS_LIST|contact_groups"
+
+
+	add_remove_options
+
+	cat <<- EOF
+	  <br><br>
+	  <input type=hidden name=SCR value=$SCR>
+	  <input type=hidden name=DO value=UPDATE>
+	  <input type=hidden name=SRV_TMP_ID value=$SRV_TMP_ID>
+	  <input type=submit value="Update This Host Template">
+	  </form><br>
+	  <form method=POST action=/cgi-bin/auth.cgi>
+	  <input type=hidden name=SCR value=$SCR>
+	  <input type=hidden name=DO value=DELETE>
+	  <input type=hidden name=SRV_TMP_ID value=$SRV_TMP_ID>
+	  <input type=submit value="Delete This Host Template">
+	  </form><br>
+	EOF
+
+# make a list of the services which use this template
+  echo "<center>"
+  echo "<h3>Services which use this template</h3>"
+  while IFS="|" read ID NAME USE ; do
+    echo $USE | egrep "^${SRV_TMP_ID},|,${SRV_TMP_ID},|,${SRV_TMP_ID}$" > /dev/null 2>&1 && {
+      echo "<a href=\"/cgi-bin/auth.cgi?SCR=service_edit&DO=SRV&SRV_ID=$ID\">$NAME</a>&nbsp &nbsp &nbsp"
+    }
+  done< <(echo "select service_id,name,use from services;" | sql_query )
+  echo "</center>"
+
+}

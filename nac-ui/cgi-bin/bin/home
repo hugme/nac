@@ -130,5 +130,5 @@ done< <(echo "select log_id,type,details,create_date,description,object_1,object
 	<input type=hidden name=SCR value="$SCR">
 	</form>
 	EOF
-echo </table>
+echo "</table>"
 

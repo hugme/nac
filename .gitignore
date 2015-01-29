@@ -1,0 +1,7 @@
+var
+etc/logged_in
+etc/passwd
+etc/admin_level
+.pgpass
+etc/nac.conf
+varset

@@ -5,3 +5,4 @@ etc/admin_level
 .pgpass
 etc/nac.conf
 varset
+*.log

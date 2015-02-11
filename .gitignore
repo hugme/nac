@@ -6,3 +6,4 @@ etc/admin_level
 etc/nac.conf
 varset
 *.log
+*.swp
